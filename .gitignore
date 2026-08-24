@@ -1,0 +1,7 @@
+# Config privata dello skill (contiene il codice famiglia = "password" del DB Firebase)
+.claude/skills/che-te-voi-magna/config.json
+
+# Sistema
+.DS_Store
+Thumbs.db
+*.log

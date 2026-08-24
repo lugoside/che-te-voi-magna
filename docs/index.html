@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#8a2c02" />
+  <title>Che te voi magnà?</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-emoji" aria-hidden="true">🍝</span>
+      <div class="brand-txt">
+        <h1>Che te voi magnà?</h1>
+        <p class="tagline">L'assistente de casa pe' decide che se magna</p>
+      </div>
+    </div>
+    <span id="syncDot" class="sync-dot off" title="Sincronizzazione"></span>
+  </header>
+
+  <main>
+    <!-- ============================ HOME / PROPONI ============================ -->
+    <section id="home" class="screen active">
+      <div class="card">
+        <h2 class="q">Chi c'è a tavola?</h2>
+        <div id="presentiChips" class="chips"></div>
+
+        <div class="row2">
+          <div>
+            <h2 class="q">Quante idee?</h2>
+            <div class="stepper">
+              <button type="button" id="nrMeno" class="step">−</button>
+              <span id="nrPasti" class="step-val">3</span>
+              <button type="button" id="nrPiu" class="step">+</button>
+            </div>
+          </div>
+          <div class="grow">
+            <h2 class="q">Che portata?</h2>
+            <div id="portateChips" class="chips"></div>
+          </div>
+        </div>
+
+        <h2 class="q">Ingredienti da usare <small>(frigo, in scadenza, voglie)</small></h2>
+        <div class="ing-input">
+          <input id="ingInput" type="text" placeholder="es. zucca, salsiccia…" autocomplete="off" />
+          <button type="button" id="ingAdd" class="btn-mini">＋</button>
+        </div>
+        <div id="ingChips" class="chips small"></div>
+
+        <div class="cta-row">
+          <button type="button" id="proponiBtn" class="btn-primary">Che te voi magnà? 🍽️</button>
+          <button type="button" id="rimescolaBtn" class="btn-ghost" title="Altre idee">🎲</button>
+        </div>
+      </div>
+
+      <div id="proposte" class="proposte"></div>
+    </section>
+
+    <!-- ============================ RICETTARIO ============================ -->
+    <section id="ricettario" class="screen">
+      <div class="card">
+        <h2 class="q">Ricettario di famiglia</h2>
+        <input id="cercaRic" type="search" placeholder="Cerca un piatto o un ingrediente…" />
+        <div id="filtriPortata" class="chips small"></div>
+      </div>
+      <div id="listaRicette" class="lista"></div>
+    </section>
+
+    <!-- ============================ INSEGNA A RUBEN ============================ -->
+    <section id="insegna" class="screen">
+      <div class="card">
+        <h2 class="q">Insegna a Ruben 👨‍🍳</h2>
+        <p class="hint">Accumula qui le tue richieste. Poi, quando vuoi, si lancia Claude Code
+          per processarle e far crescere il ricettario. Niente costi: lavora in blocco.</p>
+        <label class="lbl">Tipo di richiesta</label>
+        <select id="obsTipo">
+          <option value="nuova-ricetta">💡 Voglio nuove ricette</option>
+          <option value="importa-url">🔗 Importa una ricetta da un link</option>
+          <option value="regola">📏 Regola / preferenza (addestramento)</option>
+          <option value="correzione">✏️ Correzione a una ricetta</option>
+        </select>
+        <textarea id="obsTesto" rows="3" placeholder="Scrivi qui…"></textarea>
+        <p id="obsEsempio" class="hint esempio"></p>
+        <button type="button" id="obsAdd" class="btn-primary">Aggiungi alla coda</button>
+      </div>
+      <div class="card">
+        <div class="coda-head">
+          <h2 class="q">In coda <span id="codaCount" class="badge">0</span></h2>
+          <button type="button" id="copiaComando" class="btn-ghost small">📋 Copia comando</button>
+        </div>
+        <p class="hint">In Claude Code lancia: <code>/che-te-voi-magna</code></p>
+        <div id="listaCoda" class="lista"></div>
+      </div>
+    </section>
+
+    <!-- ============================ STORICO ============================ -->
+    <section id="storico" class="screen">
+      <div class="card">
+        <h2 class="q">Cosa abbiamo mangiato</h2>
+        <p class="hint">Serve a non ripetere lo stesso piatto entro 7 giorni.</p>
+      </div>
+      <div id="listaStorico" class="lista"></div>
+    </section>
+
+    <!-- ============================ IMPOSTAZIONI ============================ -->
+    <section id="impostazioni" class="screen">
+      <div class="card">
+        <h2 class="q">Famiglia</h2>
+        <div id="profiliEditor"></div>
+        <button type="button" id="addProfilo" class="btn-ghost small">＋ Aggiungi persona</button>
+      </div>
+
+      <div class="card">
+        <h2 class="q">Dispensa <small>(ingredienti sempre in casa, non elencati)</small></h2>
+        <div class="ing-input">
+          <input id="dispInput" type="text" placeholder="es. olio, sale…" autocomplete="off" />
+          <button type="button" id="dispAdd" class="btn-mini">＋</button>
+        </div>
+        <div id="dispChips" class="chips small"></div>
+      </div>
+
+      <div class="card">
+        <h2 class="q">Sincronizzazione famiglia</h2>
+        <label class="lbl">URL Firebase</label>
+        <input id="syncUrl" type="text" placeholder="https://…firebasedatabase.app/" />
+        <label class="lbl">Codice famiglia</label>
+        <input id="syncCode" type="text" placeholder="es. famiglia-rossi" />
+        <label class="switch">
+          <input id="syncOn" type="checkbox" /> <span>Sync attiva</span>
+        </label>
+        <p class="hint">Stato: <span id="syncStato">—</span></p>
+      </div>
+
+      <div class="card">
+        <h2 class="q">Claude</h2>
+        <label class="lbl">Modello preferito (per lo skill)</label>
+        <select id="modello">
+          <option value="claude-opus-5">Claude Opus 5 (qualità massima)</option>
+          <option value="claude-sonnet-5">Claude Sonnet 5 (più economico)</option>
+        </select>
+      </div>
+
+      <div class="card">
+        <h2 class="q">Dati</h2>
+        <div class="btn-grid">
+          <button type="button" id="exportBtn" class="btn-ghost small">⬇️ Esporta</button>
+          <button type="button" id="importBtn" class="btn-ghost small">⬆️ Importa</button>
+          <button type="button" id="reseedBtn" class="btn-ghost small">🌱 Ricarica ricettario base</button>
+        </div>
+        <input id="importFile" type="file" accept="application/json" hidden />
+        <p class="hint">Versione app: <span id="appVer">—</span></p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button type="button" class="tab active" data-screen="home"><span>🍽️</span>Proponi</button>
+    <button type="button" class="tab" data-screen="ricettario"><span>📖</span>Ricettario</button>
+    <button type="button" class="tab" data-screen="insegna"><span>👨‍🍳</span>Insegna</button>
+    <button type="button" class="tab" data-screen="storico"><span>🗓️</span>Storico</button>
+    <button type="button" class="tab" data-screen="impostazioni"><span>⚙️</span>Impostazioni</button>
+  </nav>
+
+  <!-- toast -->
+  <div id="toast" class="toast"></div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
