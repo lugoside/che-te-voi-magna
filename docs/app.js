@@ -6,7 +6,7 @@ import {
 } from "./engine.js";
 import { Sync, load, save, mkUid, newDeviceId, mergeLog } from "./sync.js";
 
-const APP_VERSION = "v8";
+const APP_VERSION = "v9";
 
 // ---------------------------------------------------------------------------
 // Chiavi localStorage + stato
@@ -63,14 +63,22 @@ sync.onStatus = (s) => setDot(SYNC.on ? s : "off");
 let _pollId = null;
 
 function ricetteToObj(list) { const o = {}; for (const r of list) { const { id, ...rest } = r; if (id != null) o[id] = rest; } return o; }
+// fetch che distingue "vuoto" da "errore di rete" (per potare in sicurezza)
+async function getNode(path) {
+  const u = sync.nodeUrl(path); if (!u) return { ok: false, data: null };
+  try { const r = await fetch(u + ".json", { cache: "no-store" }); return { ok: true, data: await r.json() }; }
+  catch { return { ok: false, data: null }; }
+}
 
 async function reconcile() {
   if (!SYNC.on || !sync.enabled) return;
   try {
-    const [rc, rp, rd, rr, rric, rs, rq] = await Promise.all([
+    const [rc, rp, rd, rr, rric] = await Promise.all([
       sync.get("config"), sync.get("profili"), sync.get("dispensa"),
-      sync.get("regole"), sync.get("ricette"), sync.get("storico"), sync.get("coda"),
+      sync.get("regole"), sync.get("ricette"),
     ]);
+    const rsN = await getNode("storico");
+    const rqN = await getNode("coda");
     let changed = false;
     const differ = (a, b) => JSON.stringify(a) !== JSON.stringify(b);
     const sortById = (l) => [...l].sort((a, b) => (String(a.id) < String(b.id) ? -1 : 1));
@@ -84,8 +92,14 @@ async function reconcile() {
     if (remoteRic.length) { if (differ(sortById(remoteRic), sortById(RICETTE))) { RICETTE = remoteRic; save(LS.ricette, RICETTE); changed = true; } }
     else if (RICETTE.length) await sync.put("ricette", ricetteToObj(RICETTE));
     // log append-only
-    const ms = mergeLog(STORICO, rs); if (ms.changed) { STORICO = ms.log; save(LS.storico, STORICO); changed = true; }
-    const mq = mergeLog(CODA, rq); if (mq.changed) { CODA = mq.log; save(LS.coda, CODA); changed = true; }
+    // log append-only: fondi le novità dal cloud e POTA le voci cancellate da remoto
+    // (solo se il fetch è andato a buon fine → niente cancellazioni per colpa della rete)
+    const ms = mergeLog(STORICO, rsN.data); if (ms.changed) { STORICO = ms.log; changed = true; }
+    if (rsN.ok) { const ids = new Set(Object.keys(rsN.data || {})); const n = STORICO.length; STORICO = STORICO.filter((e) => !e.id || ids.has(e.id)); if (STORICO.length !== n) changed = true; }
+    save(LS.storico, STORICO);
+    const mq = mergeLog(CODA, rqN.data); if (mq.changed) { CODA = mq.log; changed = true; }
+    if (rqN.ok) { const ids = new Set(Object.keys(rqN.data || {})); const n = CODA.length; CODA = CODA.filter((e) => !e.id || ids.has(e.id)); if (CODA.length !== n) changed = true; }
+    save(LS.coda, CODA);
     await flushPending();
     if (changed) renderAllSafe();
   } catch {}
