@@ -6,7 +6,7 @@ import {
 } from "./engine.js";
 import { Sync, load, save, mkUid, newDeviceId, mergeLog } from "./sync.js";
 
-const APP_VERSION = "v4";
+const APP_VERSION = "v5";
 
 // ---------------------------------------------------------------------------
 // Chiavi localStorage + stato
