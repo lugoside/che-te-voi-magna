@@ -79,7 +79,7 @@ Per **ogni** osservazione pending, in base a `tipo`:
 ```
 
 ### Regole di generazione (sempre)
-1. **NON elencare** gli ingredienti presenti in `dispensa` (olio, sale, acqua, pepe, …).
+1. **NON elencare** gli ingredienti presenti in `dispensa` (olio, sale, acqua, pepe, …) tra gli `ingredienti`, ma **usali normalmente nei `passaggi`** dove servono (es. «rosola in un filo d'olio», «lessa in acqua salata», «aggiusta di sale»). Regola fissa: dispensa = sempre fuori dagli ingredienti, mai fuori dalle preparazioni.
 2. Quantità per **~2 adulti + 1 bimbo**, con unità sensate (g, ml, pz, spicchio…).
 3. Passaggi **sintetici** (2–5 righe), in italiano.
 4. Rispetta **tutte** le `regole` esistenti e le `allergie`/gusti nei `profili`.

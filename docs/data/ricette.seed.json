@@ -6,23 +6,50 @@
       "nome": "Pasta pomodoro e basilico",
       "portata": "primo",
       "ingredienti": [
-        { "nome": "pasta", "q": 240, "unita": "g" },
-        { "nome": "passata di pomodoro", "q": 400, "unita": "g" },
-        { "nome": "aglio", "q": 1, "unita": "spicchio" },
-        { "nome": "basilico", "q": 6, "unita": "foglie" },
-        { "nome": "parmigiano", "q": 30, "unita": "g", "opzionale": true }
+        {
+          "nome": "pasta",
+          "q": 240,
+          "unita": "g"
+        },
+        {
+          "nome": "passata di pomodoro",
+          "q": 400,
+          "unita": "g"
+        },
+        {
+          "nome": "aglio",
+          "q": 1,
+          "unita": "spicchio"
+        },
+        {
+          "nome": "basilico",
+          "q": 6,
+          "unita": "foglie"
+        },
+        {
+          "nome": "parmigiano",
+          "q": 30,
+          "unita": "g",
+          "opzionale": true
+        }
       ],
       "passaggi": [
-        "Rosola l'aglio, aggiungi la passata e cuoci 12-15 min.",
-        "Lessa la pasta al dente e scolala.",
+        "Rosola l'aglio in un filo d'olio, aggiungi la passata e cuoci 12-15 min, salando.",
+        "Lessa la pasta in acqua salata al dente e scolala.",
         "Manteca col sugo, unisci il basilico e servi con parmigiano."
       ],
       "tempoMin": 25,
       "difficolta": "facile",
-      "tag": ["casereccio", "veloce", "economico"],
+      "tag": [
+        "casereccio",
+        "veloce",
+        "economico"
+      ],
       "adattoBimbi": true,
       "stagioni": [],
-      "fonte": { "tipo": "seed" },
+      "fonte": {
+        "tipo": "seed"
+      },
       "createdAt": 0
     },
     {
@@ -30,23 +57,51 @@
       "nome": "Pasta zucca e salsiccia",
       "portata": "primo",
       "ingredienti": [
-        { "nome": "pasta", "q": 240, "unita": "g" },
-        { "nome": "zucca", "q": 300, "unita": "g" },
-        { "nome": "salsiccia", "q": 150, "unita": "g" },
-        { "nome": "cipolla", "q": 0.5, "unita": "pz" },
-        { "nome": "parmigiano", "q": 30, "unita": "g" }
+        {
+          "nome": "pasta",
+          "q": 240,
+          "unita": "g"
+        },
+        {
+          "nome": "zucca",
+          "q": 300,
+          "unita": "g"
+        },
+        {
+          "nome": "salsiccia",
+          "q": 150,
+          "unita": "g"
+        },
+        {
+          "nome": "cipolla",
+          "q": 0.5,
+          "unita": "pz"
+        },
+        {
+          "nome": "parmigiano",
+          "q": 30,
+          "unita": "g"
+        }
       ],
       "passaggi": [
-        "Rosola la cipolla, aggiungi la salsiccia sbriciolata e rosola.",
-        "Unisci la zucca a cubetti e un mestolo d'acqua, cuoci finché morbida.",
-        "Lessa la pasta, mantecala col sugo e il parmigiano."
+        "Rosola la cipolla in un filo d'olio, aggiungi la salsiccia sbriciolata e rosola.",
+        "Unisci la zucca a cubetti e un mestolo d'acqua, cuoci finché morbida, salando.",
+        "Lessa la pasta in acqua salata, mantecala col sugo e il parmigiano."
       ],
       "tempoMin": 35,
       "difficolta": "media",
-      "tag": ["casereccio", "saporito"],
+      "tag": [
+        "casereccio",
+        "saporito"
+      ],
       "adattoBimbi": true,
-      "stagioni": ["autunno", "inverno"],
-      "fonte": { "tipo": "seed" },
+      "stagioni": [
+        "autunno",
+        "inverno"
+      ],
+      "fonte": {
+        "tipo": "seed"
+      },
       "createdAt": 0
     },
     {
@@ -54,24 +109,53 @@
       "nome": "Risotto allo zafferano",
       "portata": "primo",
       "ingredienti": [
-        { "nome": "riso Carnaroli", "q": 240, "unita": "g" },
-        { "nome": "brodo vegetale", "q": 800, "unita": "ml" },
-        { "nome": "zafferano", "q": 1, "unita": "bustina" },
-        { "nome": "cipolla", "q": 0.5, "unita": "pz" },
-        { "nome": "burro", "q": 30, "unita": "g" },
-        { "nome": "parmigiano", "q": 40, "unita": "g" }
+        {
+          "nome": "riso Carnaroli",
+          "q": 240,
+          "unita": "g"
+        },
+        {
+          "nome": "brodo vegetale",
+          "q": 800,
+          "unita": "ml"
+        },
+        {
+          "nome": "zafferano",
+          "q": 1,
+          "unita": "bustina"
+        },
+        {
+          "nome": "cipolla",
+          "q": 0.5,
+          "unita": "pz"
+        },
+        {
+          "nome": "burro",
+          "q": 30,
+          "unita": "g"
+        },
+        {
+          "nome": "parmigiano",
+          "q": 40,
+          "unita": "g"
+        }
       ],
       "passaggi": [
         "Soffriggi la cipolla nel burro, tosta il riso.",
         "Aggiungi il brodo caldo poco per volta mescolando, ~16 min.",
-        "A fine cottura sciogli lo zafferano, manteca con burro e parmigiano."
+        "A fine cottura sciogli lo zafferano, manteca con burro e parmigiano, aggiustando di sale."
       ],
       "tempoMin": 30,
       "difficolta": "media",
-      "tag": ["casereccio", "comfort"],
+      "tag": [
+        "casereccio",
+        "comfort"
+      ],
       "adattoBimbi": true,
       "stagioni": [],
-      "fonte": { "tipo": "seed" },
+      "fonte": {
+        "tipo": "seed"
+      },
       "createdAt": 0
     },
     {
@@ -79,23 +163,52 @@
       "nome": "Pasta tonno e pomodorini",
       "portata": "primo",
       "ingredienti": [
-        { "nome": "pasta", "q": 240, "unita": "g" },
-        { "nome": "tonno sott'olio", "q": 160, "unita": "g" },
-        { "nome": "pomodorini", "q": 250, "unita": "g" },
-        { "nome": "aglio", "q": 1, "unita": "spicchio" },
-        { "nome": "prezzemolo", "q": 1, "unita": "ciuffo", "opzionale": true }
+        {
+          "nome": "pasta",
+          "q": 240,
+          "unita": "g"
+        },
+        {
+          "nome": "tonno sott'olio",
+          "q": 160,
+          "unita": "g"
+        },
+        {
+          "nome": "pomodorini",
+          "q": 250,
+          "unita": "g"
+        },
+        {
+          "nome": "aglio",
+          "q": 1,
+          "unita": "spicchio"
+        },
+        {
+          "nome": "prezzemolo",
+          "q": 1,
+          "unita": "ciuffo",
+          "opzionale": true
+        }
       ],
       "passaggi": [
-        "Rosola l'aglio, aggiungi i pomodorini e cuoci 8 min.",
+        "Rosola l'aglio in un filo d'olio, aggiungi i pomodorini e cuoci 8 min, salando.",
         "Unisci il tonno sgocciolato.",
-        "Manteca con la pasta e spolvera di prezzemolo."
+        "Lessa la pasta in acqua salata, mantecala nel sugo e spolvera di prezzemolo."
       ],
       "tempoMin": 20,
       "difficolta": "facile",
-      "tag": ["casereccio", "veloce", "dispensa"],
+      "tag": [
+        "casereccio",
+        "veloce",
+        "dispensa"
+      ],
       "adattoBimbi": true,
-      "stagioni": ["estate"],
-      "fonte": { "tipo": "seed" },
+      "stagioni": [
+        "estate"
+      ],
+      "fonte": {
+        "tipo": "seed"
+      },
       "createdAt": 0
     },
     {
@@ -103,24 +216,57 @@
       "nome": "Insalata di riso",
       "portata": "primo",
       "ingredienti": [
-        { "nome": "riso", "q": 240, "unita": "g" },
-        { "nome": "tonno", "q": 160, "unita": "g" },
-        { "nome": "mozzarella", "q": 125, "unita": "g" },
-        { "nome": "pomodorini", "q": 150, "unita": "g" },
-        { "nome": "mais", "q": 100, "unita": "g" },
-        { "nome": "olive", "q": 50, "unita": "g", "opzionale": true }
+        {
+          "nome": "riso",
+          "q": 240,
+          "unita": "g"
+        },
+        {
+          "nome": "tonno",
+          "q": 160,
+          "unita": "g"
+        },
+        {
+          "nome": "mozzarella",
+          "q": 125,
+          "unita": "g"
+        },
+        {
+          "nome": "pomodorini",
+          "q": 150,
+          "unita": "g"
+        },
+        {
+          "nome": "mais",
+          "q": 100,
+          "unita": "g"
+        },
+        {
+          "nome": "olive",
+          "q": 50,
+          "unita": "g",
+          "opzionale": true
+        }
       ],
       "passaggi": [
-        "Lessa il riso, scolalo e raffreddalo.",
+        "Lessa il riso in acqua salata, scolalo e raffreddalo.",
         "Taglia a cubetti mozzarella e pomodorini.",
-        "Unisci tutto e condisci; meglio se riposa in frigo."
+        "Unisci tutto e condisci con un filo d'olio; meglio se riposa in frigo."
       ],
       "tempoMin": 25,
       "difficolta": "facile",
-      "tag": ["casereccio", "fresco", "estivo"],
+      "tag": [
+        "casereccio",
+        "fresco",
+        "estivo"
+      ],
       "adattoBimbi": true,
-      "stagioni": ["estate"],
-      "fonte": { "tipo": "seed" },
+      "stagioni": [
+        "estate"
+      ],
+      "fonte": {
+        "tipo": "seed"
+      },
       "createdAt": 0
     },
     {
@@ -128,22 +274,44 @@
       "nome": "Pollo e patate al forno",
       "portata": "secondo",
       "ingredienti": [
-        { "nome": "sovracosce di pollo", "q": 600, "unita": "g" },
-        { "nome": "patate", "q": 500, "unita": "g" },
-        { "nome": "rosmarino", "q": 2, "unita": "rametti" },
-        { "nome": "aglio", "q": 2, "unita": "spicchi" }
+        {
+          "nome": "sovracosce di pollo",
+          "q": 600,
+          "unita": "g"
+        },
+        {
+          "nome": "patate",
+          "q": 500,
+          "unita": "g"
+        },
+        {
+          "nome": "rosmarino",
+          "q": 2,
+          "unita": "rametti"
+        },
+        {
+          "nome": "aglio",
+          "q": 2,
+          "unita": "spicchi"
+        }
       ],
       "passaggi": [
         "Taglia le patate a spicchi e disponile in teglia col pollo.",
-        "Condisci con rosmarino e aglio.",
+        "Condisci con olio, sale, rosmarino e aglio.",
         "Inforna a 200°C per ~45 min girando a metà."
       ],
       "tempoMin": 60,
       "difficolta": "facile",
-      "tag": ["casereccio", "forno", "domenica"],
+      "tag": [
+        "casereccio",
+        "forno",
+        "domenica"
+      ],
       "adattoBimbi": true,
       "stagioni": [],
-      "fonte": { "tipo": "seed" },
+      "fonte": {
+        "tipo": "seed"
+      },
       "createdAt": 0
     },
     {
@@ -151,22 +319,48 @@
       "nome": "Frittata di zucchine",
       "portata": "secondo",
       "ingredienti": [
-        { "nome": "uova", "q": 5, "unita": "pz" },
-        { "nome": "zucchine", "q": 300, "unita": "g" },
-        { "nome": "parmigiano", "q": 40, "unita": "g" },
-        { "nome": "cipollotto", "q": 1, "unita": "pz", "opzionale": true }
+        {
+          "nome": "uova",
+          "q": 5,
+          "unita": "pz"
+        },
+        {
+          "nome": "zucchine",
+          "q": 300,
+          "unita": "g"
+        },
+        {
+          "nome": "parmigiano",
+          "q": 40,
+          "unita": "g"
+        },
+        {
+          "nome": "cipollotto",
+          "q": 1,
+          "unita": "pz",
+          "opzionale": true
+        }
       ],
       "passaggi": [
-        "Affetta e rosola le zucchine finché morbide.",
+        "Affetta e rosola le zucchine in un filo d'olio finché morbide, salando a piacere.",
         "Sbatti le uova col parmigiano, unisci le zucchine.",
-        "Cuoci in padella a fuoco medio, gira e completa."
+        "Cuoci in padella con un filo d'olio a fuoco medio, gira e completa."
       ],
       "tempoMin": 25,
       "difficolta": "facile",
-      "tag": ["casereccio", "veloce", "svuotafrigo"],
+      "tag": [
+        "casereccio",
+        "veloce",
+        "svuotafrigo"
+      ],
       "adattoBimbi": true,
-      "stagioni": ["primavera", "estate"],
-      "fonte": { "tipo": "seed" },
+      "stagioni": [
+        "primavera",
+        "estate"
+      ],
+      "fonte": {
+        "tipo": "seed"
+      },
       "createdAt": 0
     },
     {
@@ -174,24 +368,54 @@
       "nome": "Polpette al sugo",
       "portata": "secondo",
       "ingredienti": [
-        { "nome": "carne macinata", "q": 400, "unita": "g" },
-        { "nome": "pane raffermo", "q": 60, "unita": "g" },
-        { "nome": "latte", "q": 80, "unita": "ml" },
-        { "nome": "uovo", "q": 1, "unita": "pz" },
-        { "nome": "parmigiano", "q": 40, "unita": "g" },
-        { "nome": "passata di pomodoro", "q": 400, "unita": "g" }
+        {
+          "nome": "carne macinata",
+          "q": 400,
+          "unita": "g"
+        },
+        {
+          "nome": "pane raffermo",
+          "q": 60,
+          "unita": "g"
+        },
+        {
+          "nome": "latte",
+          "q": 80,
+          "unita": "ml"
+        },
+        {
+          "nome": "uovo",
+          "q": 1,
+          "unita": "pz"
+        },
+        {
+          "nome": "parmigiano",
+          "q": 40,
+          "unita": "g"
+        },
+        {
+          "nome": "passata di pomodoro",
+          "q": 400,
+          "unita": "g"
+        }
       ],
       "passaggi": [
-        "Ammolla il pane nel latte, impasta con carne, uovo e parmigiano.",
-        "Forma le polpette e rosolale.",
-        "Aggiungi la passata e cuoci 20 min a fuoco basso."
+        "Ammolla il pane nel latte, impasta con carne, uovo, parmigiano e un pizzico di sale.",
+        "Forma le polpette e rosolale in un filo d'olio.",
+        "Aggiungi la passata e cuoci 20 min a fuoco basso, aggiustando di sale."
       ],
       "tempoMin": 45,
       "difficolta": "media",
-      "tag": ["casereccio", "saporito", "amato-dai-bimbi"],
+      "tag": [
+        "casereccio",
+        "saporito",
+        "amato-dai-bimbi"
+      ],
       "adattoBimbi": true,
       "stagioni": [],
-      "fonte": { "tipo": "seed" },
+      "fonte": {
+        "tipo": "seed"
+      },
       "createdAt": 0
     },
     {
@@ -199,23 +423,49 @@
       "nome": "Scaloppine al limone",
       "portata": "secondo",
       "ingredienti": [
-        { "nome": "fettine di vitello", "q": 400, "unita": "g" },
-        { "nome": "farina", "q": 30, "unita": "g" },
-        { "nome": "limone", "q": 1, "unita": "pz" },
-        { "nome": "burro", "q": 30, "unita": "g" },
-        { "nome": "prezzemolo", "q": 1, "unita": "ciuffo", "opzionale": true }
+        {
+          "nome": "fettine di vitello",
+          "q": 400,
+          "unita": "g"
+        },
+        {
+          "nome": "farina",
+          "q": 30,
+          "unita": "g"
+        },
+        {
+          "nome": "limone",
+          "q": 1,
+          "unita": "pz"
+        },
+        {
+          "nome": "burro",
+          "q": 30,
+          "unita": "g"
+        },
+        {
+          "nome": "prezzemolo",
+          "q": 1,
+          "unita": "ciuffo",
+          "opzionale": true
+        }
       ],
       "passaggi": [
-        "Infarina le fettine e rosolale nel burro.",
+        "Sala e infarina le fettine, poi rosolale nel burro.",
         "Sfuma col succo di limone e un po' d'acqua.",
         "Addensa il fondo e servi con prezzemolo."
       ],
       "tempoMin": 20,
       "difficolta": "facile",
-      "tag": ["casereccio", "veloce"],
+      "tag": [
+        "casereccio",
+        "veloce"
+      ],
       "adattoBimbi": true,
       "stagioni": [],
-      "fonte": { "tipo": "seed" },
+      "fonte": {
+        "tipo": "seed"
+      },
       "createdAt": 0
     },
     {
@@ -223,20 +473,41 @@
       "nome": "Caprese",
       "portata": "antipasto",
       "ingredienti": [
-        { "nome": "mozzarella", "q": 250, "unita": "g" },
-        { "nome": "pomodori", "q": 300, "unita": "g" },
-        { "nome": "basilico", "q": 6, "unita": "foglie" }
+        {
+          "nome": "mozzarella",
+          "q": 250,
+          "unita": "g"
+        },
+        {
+          "nome": "pomodori",
+          "q": 300,
+          "unita": "g"
+        },
+        {
+          "nome": "basilico",
+          "q": 6,
+          "unita": "foglie"
+        }
       ],
       "passaggi": [
         "Affetta mozzarella e pomodori.",
-        "Alterna a strati, condisci e completa col basilico."
+        "Alterna a strati, condisci con olio e sale e completa col basilico."
       ],
       "tempoMin": 10,
       "difficolta": "facile",
-      "tag": ["casereccio", "fresco", "estivo", "veloce"],
+      "tag": [
+        "casereccio",
+        "fresco",
+        "estivo",
+        "veloce"
+      ],
       "adattoBimbi": true,
-      "stagioni": ["estate"],
-      "fonte": { "tipo": "seed" },
+      "stagioni": [
+        "estate"
+      ],
+      "fonte": {
+        "tipo": "seed"
+      },
       "createdAt": 0
     },
     {
@@ -244,10 +515,26 @@
       "nome": "Bruschette pomodoro",
       "portata": "antipasto",
       "ingredienti": [
-        { "nome": "pane", "q": 6, "unita": "fette" },
-        { "nome": "pomodori", "q": 300, "unita": "g" },
-        { "nome": "aglio", "q": 1, "unita": "spicchio" },
-        { "nome": "basilico", "q": 6, "unita": "foglie" }
+        {
+          "nome": "pane",
+          "q": 6,
+          "unita": "fette"
+        },
+        {
+          "nome": "pomodori",
+          "q": 300,
+          "unita": "g"
+        },
+        {
+          "nome": "aglio",
+          "q": 1,
+          "unita": "spicchio"
+        },
+        {
+          "nome": "basilico",
+          "q": 6,
+          "unita": "foglie"
+        }
       ],
       "passaggi": [
         "Tosta il pane e strofinalo con l'aglio.",
@@ -256,10 +543,17 @@
       ],
       "tempoMin": 15,
       "difficolta": "facile",
-      "tag": ["casereccio", "veloce"],
+      "tag": [
+        "casereccio",
+        "veloce"
+      ],
       "adattoBimbi": true,
-      "stagioni": ["estate"],
-      "fonte": { "tipo": "seed" },
+      "stagioni": [
+        "estate"
+      ],
+      "fonte": {
+        "tipo": "seed"
+      },
       "createdAt": 0
     },
     {
@@ -267,23 +561,53 @@
       "nome": "Vellutata di zucca",
       "portata": "primo",
       "ingredienti": [
-        { "nome": "zucca", "q": 600, "unita": "g" },
-        { "nome": "patata", "q": 1, "unita": "pz" },
-        { "nome": "cipolla", "q": 0.5, "unita": "pz" },
-        { "nome": "brodo vegetale", "q": 700, "unita": "ml" },
-        { "nome": "crostini", "q": 1, "unita": "manciata", "opzionale": true }
+        {
+          "nome": "zucca",
+          "q": 600,
+          "unita": "g"
+        },
+        {
+          "nome": "patata",
+          "q": 1,
+          "unita": "pz"
+        },
+        {
+          "nome": "cipolla",
+          "q": 0.5,
+          "unita": "pz"
+        },
+        {
+          "nome": "brodo vegetale",
+          "q": 700,
+          "unita": "ml"
+        },
+        {
+          "nome": "crostini",
+          "q": 1,
+          "unita": "manciata",
+          "opzionale": true
+        }
       ],
       "passaggi": [
-        "Rosola la cipolla, aggiungi zucca e patata a pezzi.",
+        "Rosola la cipolla in un filo d'olio, aggiungi zucca e patata a pezzi.",
         "Copri col brodo e cuoci ~25 min.",
-        "Frulla fino a crema e servi con crostini."
+        "Frulla fino a crema, aggiusta di sale e servi con crostini e un filo d'olio."
       ],
       "tempoMin": 40,
       "difficolta": "facile",
-      "tag": ["casereccio", "comfort", "vegetariano"],
+      "tag": [
+        "casereccio",
+        "comfort",
+        "vegetariano"
+      ],
       "adattoBimbi": true,
-      "stagioni": ["autunno", "inverno"],
-      "fonte": { "tipo": "seed" },
+      "stagioni": [
+        "autunno",
+        "inverno"
+      ],
+      "fonte": {
+        "tipo": "seed"
+      },
       "createdAt": 0
     },
     {
@@ -291,21 +615,38 @@
       "nome": "Patate arrosto",
       "portata": "contorno",
       "ingredienti": [
-        { "nome": "patate", "q": 700, "unita": "g" },
-        { "nome": "rosmarino", "q": 2, "unita": "rametti" },
-        { "nome": "aglio", "q": 2, "unita": "spicchi" }
+        {
+          "nome": "patate",
+          "q": 700,
+          "unita": "g"
+        },
+        {
+          "nome": "rosmarino",
+          "q": 2,
+          "unita": "rametti"
+        },
+        {
+          "nome": "aglio",
+          "q": 2,
+          "unita": "spicchi"
+        }
       ],
       "passaggi": [
         "Taglia le patate a tocchetti e asciugale.",
-        "Condisci con rosmarino e aglio.",
+        "Condisci con olio, sale, rosmarino e aglio.",
         "Inforna a 200°C per ~40 min girando."
       ],
       "tempoMin": 50,
       "difficolta": "facile",
-      "tag": ["casereccio", "forno"],
+      "tag": [
+        "casereccio",
+        "forno"
+      ],
       "adattoBimbi": true,
       "stagioni": [],
-      "fonte": { "tipo": "seed" },
+      "fonte": {
+        "tipo": "seed"
+      },
       "createdAt": 0
     },
     {
@@ -313,21 +654,45 @@
       "nome": "Insalata mista",
       "portata": "contorno",
       "ingredienti": [
-        { "nome": "insalata", "q": 200, "unita": "g" },
-        { "nome": "pomodori", "q": 200, "unita": "g" },
-        { "nome": "carote", "q": 1, "unita": "pz" },
-        { "nome": "mais", "q": 80, "unita": "g", "opzionale": true }
+        {
+          "nome": "insalata",
+          "q": 200,
+          "unita": "g"
+        },
+        {
+          "nome": "pomodori",
+          "q": 200,
+          "unita": "g"
+        },
+        {
+          "nome": "carote",
+          "q": 1,
+          "unita": "pz"
+        },
+        {
+          "nome": "mais",
+          "q": 80,
+          "unita": "g",
+          "opzionale": true
+        }
       ],
       "passaggi": [
         "Lava e taglia le verdure.",
-        "Unisci in una ciotola e condisci al momento."
+        "Unisci in una ciotola e condisci con olio e sale al momento."
       ],
       "tempoMin": 10,
       "difficolta": "facile",
-      "tag": ["casereccio", "fresco", "veloce", "leggero"],
+      "tag": [
+        "casereccio",
+        "fresco",
+        "veloce",
+        "leggero"
+      ],
       "adattoBimbi": true,
       "stagioni": [],
-      "fonte": { "tipo": "seed" },
+      "fonte": {
+        "tipo": "seed"
+      },
       "createdAt": 0
     },
     {
@@ -335,21 +700,42 @@
       "nome": "Verdure grigliate",
       "portata": "contorno",
       "ingredienti": [
-        { "nome": "zucchine", "q": 2, "unita": "pz" },
-        { "nome": "melanzane", "q": 1, "unita": "pz" },
-        { "nome": "peperoni", "q": 1, "unita": "pz" }
+        {
+          "nome": "zucchine",
+          "q": 2,
+          "unita": "pz"
+        },
+        {
+          "nome": "melanzane",
+          "q": 1,
+          "unita": "pz"
+        },
+        {
+          "nome": "peperoni",
+          "q": 1,
+          "unita": "pz"
+        }
       ],
       "passaggi": [
         "Affetta le verdure a fette regolari.",
         "Grigliale su piastra calda finché segnate.",
-        "Condisci a piacere e servi tiepide."
+        "Condisci con olio e sale a piacere e servi tiepide."
       ],
       "tempoMin": 25,
       "difficolta": "facile",
-      "tag": ["casereccio", "estivo", "leggero", "vegetariano"],
+      "tag": [
+        "casereccio",
+        "estivo",
+        "leggero",
+        "vegetariano"
+      ],
       "adattoBimbi": true,
-      "stagioni": ["estate"],
-      "fonte": { "tipo": "seed" },
+      "stagioni": [
+        "estate"
+      ],
+      "fonte": {
+        "tipo": "seed"
+      },
       "createdAt": 0
     },
     {
@@ -357,12 +743,36 @@
       "nome": "Tiramisù",
       "portata": "dolce",
       "ingredienti": [
-        { "nome": "savoiardi", "q": 200, "unita": "g" },
-        { "nome": "mascarpone", "q": 250, "unita": "g" },
-        { "nome": "uova", "q": 3, "unita": "pz" },
-        { "nome": "zucchero", "q": 80, "unita": "g" },
-        { "nome": "caffè", "q": 200, "unita": "ml" },
-        { "nome": "cacao", "q": 20, "unita": "g" }
+        {
+          "nome": "savoiardi",
+          "q": 200,
+          "unita": "g"
+        },
+        {
+          "nome": "mascarpone",
+          "q": 250,
+          "unita": "g"
+        },
+        {
+          "nome": "uova",
+          "q": 3,
+          "unita": "pz"
+        },
+        {
+          "nome": "zucchero",
+          "q": 80,
+          "unita": "g"
+        },
+        {
+          "nome": "caffè",
+          "q": 200,
+          "unita": "ml"
+        },
+        {
+          "nome": "cacao",
+          "q": 20,
+          "unita": "g"
+        }
       ],
       "passaggi": [
         "Monta i tuorli con lo zucchero, unisci il mascarpone e gli albumi a neve.",
@@ -371,10 +781,15 @@
       ],
       "tempoMin": 30,
       "difficolta": "media",
-      "tag": ["casereccio", "festa"],
+      "tag": [
+        "casereccio",
+        "festa"
+      ],
       "adattoBimbi": false,
       "stagioni": [],
-      "fonte": { "tipo": "seed" },
+      "fonte": {
+        "tipo": "seed"
+      },
       "createdAt": 0
     },
     {
@@ -382,12 +797,36 @@
       "nome": "Torta di mele",
       "portata": "dolce",
       "ingredienti": [
-        { "nome": "mele", "q": 3, "unita": "pz" },
-        { "nome": "farina", "q": 250, "unita": "g" },
-        { "nome": "zucchero", "q": 150, "unita": "g" },
-        { "nome": "uova", "q": 2, "unita": "pz" },
-        { "nome": "latte", "q": 120, "unita": "ml" },
-        { "nome": "lievito per dolci", "q": 1, "unita": "bustina" }
+        {
+          "nome": "mele",
+          "q": 3,
+          "unita": "pz"
+        },
+        {
+          "nome": "farina",
+          "q": 250,
+          "unita": "g"
+        },
+        {
+          "nome": "zucchero",
+          "q": 150,
+          "unita": "g"
+        },
+        {
+          "nome": "uova",
+          "q": 2,
+          "unita": "pz"
+        },
+        {
+          "nome": "latte",
+          "q": 120,
+          "unita": "ml"
+        },
+        {
+          "nome": "lievito per dolci",
+          "q": 1,
+          "unita": "bustina"
+        }
       ],
       "passaggi": [
         "Sbatti uova e zucchero, unisci farina, latte e lievito.",
@@ -396,10 +835,19 @@
       ],
       "tempoMin": 55,
       "difficolta": "media",
-      "tag": ["casereccio", "colazione", "merenda"],
+      "tag": [
+        "casereccio",
+        "colazione",
+        "merenda"
+      ],
       "adattoBimbi": true,
-      "stagioni": ["autunno", "inverno"],
-      "fonte": { "tipo": "seed" },
+      "stagioni": [
+        "autunno",
+        "inverno"
+      ],
+      "fonte": {
+        "tipo": "seed"
+      },
       "createdAt": 0
     },
     {
@@ -407,23 +855,55 @@
       "nome": "Minestrone di verdure",
       "portata": "primo",
       "ingredienti": [
-        { "nome": "misto minestrone", "q": 500, "unita": "g" },
-        { "nome": "patata", "q": 1, "unita": "pz" },
-        { "nome": "fagioli", "q": 150, "unita": "g" },
-        { "nome": "pasta piccola", "q": 120, "unita": "g", "opzionale": true },
-        { "nome": "parmigiano", "q": 30, "unita": "g", "opzionale": true }
+        {
+          "nome": "misto minestrone",
+          "q": 500,
+          "unita": "g"
+        },
+        {
+          "nome": "patata",
+          "q": 1,
+          "unita": "pz"
+        },
+        {
+          "nome": "fagioli",
+          "q": 150,
+          "unita": "g"
+        },
+        {
+          "nome": "pasta piccola",
+          "q": 120,
+          "unita": "g",
+          "opzionale": true
+        },
+        {
+          "nome": "parmigiano",
+          "q": 30,
+          "unita": "g",
+          "opzionale": true
+        }
       ],
       "passaggi": [
-        "Taglia le verdure e mettile in pentola con acqua.",
-        "Cuoci ~40 min, aggiungi i fagioli.",
-        "Se vuoi, cala la pasta e completa col parmigiano."
+        "Taglia le verdure e mettile in pentola con acqua, salando.",
+        "Cuoci ~40 min, aggiungi i fagioli e aggiusta di sale.",
+        "Se vuoi, cala la pasta e completa con un filo d'olio a crudo e il parmigiano."
       ],
       "tempoMin": 55,
       "difficolta": "facile",
-      "tag": ["casereccio", "comfort", "vegetariano", "leggero"],
+      "tag": [
+        "casereccio",
+        "comfort",
+        "vegetariano",
+        "leggero"
+      ],
       "adattoBimbi": true,
-      "stagioni": ["autunno", "inverno"],
-      "fonte": { "tipo": "seed" },
+      "stagioni": [
+        "autunno",
+        "inverno"
+      ],
+      "fonte": {
+        "tipo": "seed"
+      },
       "createdAt": 0
     }
   ]
