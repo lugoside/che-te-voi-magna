@@ -6,7 +6,7 @@ import {
 } from "./engine.js";
 import { Sync, load, save, mkUid, newDeviceId, mergeLog } from "./sync.js";
 
-const APP_VERSION = "v2";
+const APP_VERSION = "v3";
 
 // ---------------------------------------------------------------------------
 // Chiavi localStorage + stato
@@ -71,20 +71,23 @@ async function reconcile() {
       sync.get("config"), sync.get("profili"), sync.get("dispensa"),
       sync.get("regole"), sync.get("ricette"), sync.get("storico"), sync.get("coda"),
     ]);
-    // documenti condivisi: se ci sono sul cloud li adotto, altrimenti pubblico i miei
-    if (rc && typeof rc === "object") { CONFIG = { ...CONFIG, ...rc }; save(LS.config, CONFIG); } else await sync.put("config", CONFIG);
-    if (rp && typeof rp === "object") { PROFILI = rp; save(LS.profili, PROFILI); } else await sync.put("profili", PROFILI);
-    if (Array.isArray(rd)) { DISPENSA = rd; save(LS.dispensa, DISPENSA); } else await sync.put("dispensa", DISPENSA);
-    if (Array.isArray(rr)) { REGOLE = rr; save(LS.regole, REGOLE); } else await sync.put("regole", REGOLE);
+    let changed = false;
+    const differ = (a, b) => JSON.stringify(a) !== JSON.stringify(b);
+    const sortById = (l) => [...l].sort((a, b) => (String(a.id) < String(b.id) ? -1 : 1));
+    // documenti condivisi: se ci sono sul cloud li adotto (solo se diversi), altrimenti pubblico i miei
+    if (rc && typeof rc === "object") { const m = { ...CONFIG, ...rc }; if (differ(m, CONFIG)) { CONFIG = m; save(LS.config, CONFIG); changed = true; } } else await sync.put("config", CONFIG);
+    if (rp && typeof rp === "object") { if (differ(rp, PROFILI)) { PROFILI = rp; save(LS.profili, PROFILI); changed = true; } } else await sync.put("profili", PROFILI);
+    if (Array.isArray(rd)) { if (differ(rd, DISPENSA)) { DISPENSA = rd; save(LS.dispensa, DISPENSA); changed = true; } } else await sync.put("dispensa", DISPENSA);
+    if (Array.isArray(rr)) { if (differ(rr, REGOLE)) { REGOLE = rr; save(LS.regole, REGOLE); changed = true; } } else await sync.put("regole", REGOLE);
     // ricettario: se il cloud ne ha, adotto; se è vuoto, semino il mio (base per lo skill)
     const remoteRic = toList(rric);
-    if (remoteRic.length) { RICETTE = remoteRic; save(LS.ricette, RICETTE); }
+    if (remoteRic.length) { if (differ(sortById(remoteRic), sortById(RICETTE))) { RICETTE = remoteRic; save(LS.ricette, RICETTE); changed = true; } }
     else if (RICETTE.length) await sync.put("ricette", ricetteToObj(RICETTE));
     // log append-only
-    const ms = mergeLog(STORICO, rs); if (ms.changed) { STORICO = ms.log; save(LS.storico, STORICO); }
-    const mq = mergeLog(CODA, rq); if (mq.changed) { CODA = mq.log; save(LS.coda, CODA); }
+    const ms = mergeLog(STORICO, rs); if (ms.changed) { STORICO = ms.log; save(LS.storico, STORICO); changed = true; }
+    const mq = mergeLog(CODA, rq); if (mq.changed) { CODA = mq.log; save(LS.coda, CODA); changed = true; }
     await flushPending();
-    renderAll();
+    if (changed) renderAllSafe();
   } catch {}
 }
 
@@ -353,6 +356,12 @@ function renderAll() {
   renderPresenti(); renderPortate(); renderNr(); renderIngChips();
   renderRicettario(); renderCoda(); renderStorico(); renderInsegnaForm(); renderImpostazioni();
 }
+// come renderAll ma non ridisegna se l'utente sta scrivendo in un campo (non ruba il focus)
+function renderAllSafe() {
+  const a = document.activeElement;
+  if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+  renderAll();
+}
 function renderIfVisible(screens) { if (screens.includes(ui.screen)) { if (ui.screen === "ricettario") renderRicettario(); if (ui.screen === "storico") renderStorico(); if (ui.screen === "insegna") renderCoda(); if (ui.screen === "home") { renderPresenti(); } } }
 
 function setScreen(name) {
@@ -438,18 +447,6 @@ function doImport(file) {
   };
   r.readAsText(file);
 }
-async function reseed() {
-  try {
-    const j = await (await fetch("./data/ricette.seed.json", { cache: "no-store" })).json();
-    const seed = (j.ricette || []);
-    const byId = new Map(RICETTE.map((r) => [r.id, r]));
-    for (const r of seed) if (!byId.has(r.id)) RICETTE.push(r);
-    save(LS.ricette, RICETTE);
-    if (SYNC.on && sync.enabled) await sync.put("ricette", ricetteToObj(RICETTE));
-    renderRicettario(); toast("Ricettario base caricato 🌱");
-  } catch { toast("Non riesco a caricare il seed ✗"); }
-}
-
 async function ensureRicette() {
   if (RICETTE.length) return;
   try {
@@ -567,7 +564,6 @@ function wire() {
   $("#exportBtn").addEventListener("click", doExport);
   $("#importBtn").addEventListener("click", () => $("#importFile").click());
   $("#importFile").addEventListener("change", (e) => { if (e.target.files[0]) doImport(e.target.files[0]); e.target.value = ""; });
-  $("#reseedBtn").addEventListener("click", reseed);
 }
 
 // ---------------------------------------------------------------------------
