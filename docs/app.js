@@ -6,7 +6,7 @@ import {
 } from "./engine.js";
 import { Sync, load, save, mkUid, newDeviceId, mergeLog } from "./sync.js";
 
-const APP_VERSION = "v1";
+const APP_VERSION = "v2";
 
 // ---------------------------------------------------------------------------
 // Chiavi localStorage + stato
@@ -116,11 +116,14 @@ function subscribeAll() {
   });
   sync.subscribe("ricette", (msg) => {
     if (msg.path === "/") { RICETTE = toList(msg.data); }
-    else if (msg.path && msg.data) {
+    else if (msg.path && msg.path !== "/") {
       const id = msg.path.replace(/^\//, "").split("/")[0];
       const i = RICETTE.findIndex((r) => r.id === id);
-      const rec = { id, ...(typeof msg.data === "object" ? msg.data : {}) };
-      if (i >= 0) RICETTE[i] = rec; else RICETTE.push(rec);
+      if (msg.data == null) { if (i >= 0) RICETTE.splice(i, 1); } // ricetta rimossa sul cloud
+      else if (typeof msg.data === "object" && !Array.isArray(msg.data)) {
+        const rec = { id, ...msg.data };                          // ricetta intera (PUT)
+        if (i >= 0) RICETTE[i] = rec; else RICETTE.push(rec);
+      } // patch parziali (path "/<id>/<campo>") le recupera il reconcile periodico
     }
     save(LS.ricette, RICETTE); renderIfVisible(["ricettario", "home"]);
   });
@@ -189,9 +192,10 @@ function ricettaCardHTML(r, opts = {}) {
   if (r.difficolta) meta.push(`🔥 ${esc(r.difficolta)}`);
   if (r.adattoBimbi) meta.push("🍼 adatto ai bimbi");
   const motivi = opts.motivi && opts.motivi.length ? `<div class="perche">💡 ${esc(opts.motivi.join(" · "))}</div>` : "";
-  const acts = opts.actions ? `
+  const acts = (opts.actions || opts.remove) ? `
     <div class="ricetta-actions">
-      <button type="button" class="btn-ghost" data-fatto="${esc(r.id)}">✅ L'abbiamo fatto</button>
+      ${opts.actions ? `<button type="button" class="btn-ghost" data-fatto="${esc(r.id)}">✅ L'abbiamo fatto</button>` : ""}
+      ${opts.remove ? `<button type="button" class="btn-ghost danger" data-rimuovi="${esc(r.id)}">🗑️ Rimuovi</button>` : ""}
     </div>` : "";
   return `
   <article class="ricetta">
@@ -378,6 +382,18 @@ function segnaFatto(ricettaId) {
   renderProposte(); renderStorico();
 }
 
+function rimuoviRicetta(id) {
+  const r = RICETTE.find((x) => x.id === id);
+  if (!r) return;
+  if (!confirm(`Rimuovere "${r.nome}" dal ricettario di famiglia?\nVale per tutti (viene tolta anche dal database condiviso).`)) return;
+  RICETTE = RICETTE.filter((x) => x.id !== id);
+  save(LS.ricette, RICETTE);
+  deleteFromCloud("ricette", id); // così il sync non la ripristina
+  ui.proposte = ui.proposte.filter((p) => p.id !== id);
+  renderRicettario(); renderProposte();
+  toast(`"${r.nome}" rimossa dal ricettario`);
+}
+
 function aggiungiOsservazione() {
   const testo = $("#obsTesto").value.trim();
   if (!testo) { toast("Scrivi qualcosa prima 🙂"); return; }
@@ -480,10 +496,11 @@ function wire() {
     const b = e.target.closest("[data-apri]") || e.target.closest("[data-ricetta]"); if (!b) return;
     const id = b.dataset.apri || b.dataset.ricetta;
     const det = $("#det-" + CSS.escape(id)); if (!det) return;
-    if (det.hidden) { const r = RICETTE.find((x) => x.id === id); det.innerHTML = ricettaCardHTML(normalizeRicetta(r), { actions: true }); det.hidden = false; }
+    if (det.hidden) { const r = RICETTE.find((x) => x.id === id); det.innerHTML = ricettaCardHTML(normalizeRicetta(r), { actions: true, remove: true }); det.hidden = false; }
     else det.hidden = true;
   });
   $("#listaRicette").addEventListener("click", (e) => { const b = e.target.closest("[data-fatto]"); if (b) segnaFatto(b.dataset.fatto); });
+  $("#listaRicette").addEventListener("click", (e) => { const b = e.target.closest("[data-rimuovi]"); if (b) rimuoviRicetta(b.dataset.rimuovi); });
 
   // INSEGNA
   $("#obsTipo").addEventListener("change", (e) => { ui.obsTipo = e.target.value; saveUI(); renderInsegnaForm(); });
