@@ -1,6 +1,6 @@
 // Service worker: NETWORK-FIRST con fallback su cache.
 // Online → sempre l'ultima versione (app). Offline → ultima copia salvata + dati da localStorage.
-const VERSION = "v5";
+const VERSION = "v6";
 const CACHE = "ctvm-" + VERSION;
 const SHELL_ASSETS = [
   "./", "./index.html", "./styles.css", "./app.js", "./engine.js", "./sync.js",

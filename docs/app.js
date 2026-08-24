@@ -6,7 +6,7 @@ import {
 } from "./engine.js";
 import { Sync, load, save, mkUid, newDeviceId, mergeLog } from "./sync.js";
 
-const APP_VERSION = "v5";
+const APP_VERSION = "v6";
 
 // ---------------------------------------------------------------------------
 // Chiavi localStorage + stato
@@ -154,7 +154,13 @@ async function deleteFromCloud(path, id) {
 // ---------------------------------------------------------------------------
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
-function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+// ripara il classico doppio-encoding UTF-8 ("Ã©"→"é", "Ã "→"à"): in italiano il
+// pattern "Ã/Â + byte alto" non è mai legittimo, quindi correggerlo è sicuro.
+function fixMojibake(s) {
+  if (!/[ÂÃ][-¿]/.test(s)) return s;
+  try { return decodeURIComponent(escape(s)); } catch { return s; }
+}
+function esc(s) { return fixMojibake(String(s == null ? "" : s)).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function setDot(s) { const d = $("#syncDot"); if (d) d.className = "sync-dot " + s; const st = $("#syncStato"); if (st) st.textContent = ({ ok: "connesso ✓", err: "in attesa…", off: "spenta" })[s] || s; }
 let toastTimer;
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200); }

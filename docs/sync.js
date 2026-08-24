@@ -70,7 +70,7 @@ export class Sync {
   async put(path, obj) {
     const u = this.nodeUrl(path); if (!u) return false;
     try {
-      await fetch(u + ".json", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) });
+      await fetch(u + ".json", { method: "PUT", headers: { "Content-Type": "application/json; charset=utf-8" }, body: JSON.stringify(obj) });
       this._setStatus("ok"); return true;
     } catch { this._setStatus("err"); return false; }
   }
@@ -78,7 +78,7 @@ export class Sync {
   async patch(path, obj) {
     const u = this.nodeUrl(path); if (!u) return false;
     try {
-      await fetch(u + ".json", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) });
+      await fetch(u + ".json", { method: "PATCH", headers: { "Content-Type": "application/json; charset=utf-8" }, body: JSON.stringify(obj) });
       this._setStatus("ok"); return true;
     } catch { this._setStatus("err"); return false; }
   }
@@ -87,7 +87,7 @@ export class Sync {
     const u = this.nodeUrl(path); if (!u) return null;
     const body = { ...obj, ts: { ".sv": "timestamp" } }; // timestamp del server (autorevole)
     try {
-      const r = await fetch(u + ".json", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const r = await fetch(u + ".json", { method: "POST", headers: { "Content-Type": "application/json; charset=utf-8" }, body: JSON.stringify(body) });
       const j = await r.json();
       this._setStatus("ok");
       return j && j.name ? j.name : null;
