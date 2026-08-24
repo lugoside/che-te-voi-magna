@@ -182,6 +182,28 @@ ol.passaggi li { margin: 5px 0; font-size: 14px; }
 .tab.active { color: var(--primary); }
 .tab.active span { filter: none; opacity: 1; }
 
+.hint.center { text-align: center; }
+
+/* ---------- modale ---------- */
+.modal {
+  position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center;
+  background: rgba(20, 12, 6, .5); padding: 0;
+}
+.modal[hidden] { display: none; }
+.modal-card {
+  background: var(--card); width: 100%; max-width: 640px; max-height: 92vh; overflow-y: auto;
+  border-radius: 18px 18px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+  box-shadow: 0 -6px 24px rgba(0,0,0,.25); animation: slideup .2s ease;
+}
+@media (min-width: 641px) { .modal { align-items: center; } .modal-card { border-radius: 18px; } }
+@keyframes slideup { from { transform: translateY(30px); opacity: .6; } to { transform: none; opacity: 1; } }
+.ed-row { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
+.ed-row .grow { flex: 1; }
+.ed-row .q-in { width: 64px; flex: none; }
+.ed-row .u-in { width: 74px; flex: none; }
+.ed-row textarea { flex: 1; }
+.add-line { margin-top: 6px; }
+
 /* ---------- toast ---------- */
 .toast {
   position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom));

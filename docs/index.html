@@ -53,8 +53,9 @@
 
         <div class="cta-row">
           <button type="button" id="proponiBtn" class="btn-primary">Che te voi magnà? 🍽️</button>
-          <button type="button" id="rimescolaBtn" class="btn-ghost" title="Altre idee">🎲</button>
+          <button type="button" id="rimescolaBtn" class="btn-ghost" title="Altre idee (rimescola)">🎲</button>
         </div>
+        <p class="hint center">🎲 = altre idee (rimescola le proposte)</p>
       </div>
 
       <div id="proposte" class="proposte"></div>
@@ -163,6 +164,11 @@
     <button type="button" class="tab" data-screen="storico"><span>🗓️</span>Storico</button>
     <button type="button" class="tab" data-screen="impostazioni"><span>⚙️</span>Impostazioni</button>
   </nav>
+
+  <!-- modale generica -->
+  <div id="modal" class="modal" hidden>
+    <div class="modal-card"><div id="modalBody"></div></div>
+  </div>
 
   <!-- toast -->
   <div id="toast" class="toast"></div>

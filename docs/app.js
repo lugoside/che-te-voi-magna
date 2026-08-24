@@ -6,7 +6,7 @@ import {
 } from "./engine.js";
 import { Sync, load, save, mkUid, newDeviceId, mergeLog } from "./sync.js";
 
-const APP_VERSION = "v3";
+const APP_VERSION = "v4";
 
 // ---------------------------------------------------------------------------
 // Chiavi localStorage + stato
@@ -158,6 +158,12 @@ function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => (
 function setDot(s) { const d = $("#syncDot"); if (d) d.className = "sync-dot " + s; const st = $("#syncStato"); if (st) st.textContent = ({ ok: "connesso ✓", err: "in attesa…", off: "spenta" })[s] || s; }
 let toastTimer;
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200); }
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+// --- modale generica ---
+let modalCtx = null;
+function openModal(html) { $("#modalBody").innerHTML = html; $("#modal").hidden = false; }
+function closeModal() { $("#modal").hidden = true; $("#modalBody").innerHTML = ""; modalCtx = null; }
 
 // nasconde gli staple di dispensa dalle liste ingredienti (sono sempre in casa)
 function senzaDispensa(ingredienti) {
@@ -195,9 +201,10 @@ function ricettaCardHTML(r, opts = {}) {
   if (r.difficolta) meta.push(`🔥 ${esc(r.difficolta)}`);
   if (r.adattoBimbi) meta.push("🍼 adatto ai bimbi");
   const motivi = opts.motivi && opts.motivi.length ? `<div class="perche">💡 ${esc(opts.motivi.join(" · "))}</div>` : "";
-  const acts = (opts.actions || opts.remove) ? `
+  const acts = (opts.actions || opts.remove || opts.edit) ? `
     <div class="ricetta-actions">
       ${opts.actions ? `<button type="button" class="btn-ghost" data-fatto="${esc(r.id)}">✅ L'abbiamo fatto</button>` : ""}
+      ${opts.edit ? `<button type="button" class="btn-ghost" data-modifica="${esc(r.id)}">✏️ Modifica</button>` : ""}
       ${opts.remove ? `<button type="button" class="btn-ghost danger" data-rimuovi="${esc(r.id)}">🗑️ Rimuovi</button>` : ""}
     </div>` : "";
   return `
@@ -313,7 +320,10 @@ function renderStorico() {
         <div class="r-title">${esc(nomeRicetta(e.ricettaId))}</div>
         <div class="r-sub">${esc(dstr)}${e.pasto ? " · " + esc(e.pasto) : ""}${pres ? " · " + esc(pres) : ""}</div>
       </div>
-      <button class="icon-btn" data-delstorico="${esc(e.uid)}">🗑️</button>
+      <div class="r-act">
+        <button class="icon-btn" data-editstorico="${esc(e.uid)}">✏️</button>
+        <button class="icon-btn" data-delstorico="${esc(e.uid)}">🗑️</button>
+      </div>
     </div>`;
   }).join("");
 }
@@ -374,21 +384,137 @@ function setScreen(name) {
 // ---------------------------------------------------------------------------
 // Azioni
 // ---------------------------------------------------------------------------
-function segnaFatto(ricettaId) {
+// ---- Registra / modifica un PASTO nello storico (data, pasto, chi) ----
+function pastoFormHTML(o) {
+  const presSet = new Set(o.presenti || []);
+  const presChips = Object.entries(PROFILI).map(([k, p]) =>
+    `<button type="button" class="chip ${presSet.has(k) ? "on" : ""}" data-mp="${esc(k)}">${p.bimbo ? "🍼 " : ""}${esc(p.nome)}</button>`).join("");
+  return `
+    <h2 class="q">${esc(o.titolo)}</h2>
+    ${o.ricettaNome ? `<p class="hint">🍽️ ${esc(o.ricettaNome)}</p>` : ""}
+    <label class="lbl">Quando</label>
+    <input type="date" id="mpData" value="${esc(o.data)}" max="${todayISO()}">
+    <label class="lbl">Pasto</label>
+    <div class="chips" id="mpPasto">
+      <button type="button" class="chip ${o.pasto === "pranzo" ? "on" : ""}" data-pasto="pranzo">☀️ Pranzo</button>
+      <button type="button" class="chip ${o.pasto === "cena" ? "on" : ""}" data-pasto="cena">🌙 Cena</button>
+    </div>
+    <label class="lbl">Chi l'ha mangiata</label>
+    <div class="chips" id="mpPresenti">${presChips}</div>
+    <div class="cta-row">
+      <button type="button" class="btn-ghost" data-modal-close>Annulla</button>
+      <button type="button" class="btn-primary" id="mpSalva">Salva</button>
+    </div>`;
+}
+function apriRegistraPasto(ricettaId) {
   const r = RICETTE.find((x) => x.id === ricettaId);
   const now = new Date();
-  const e = {
-    uid: mkUid(DEVICE_ID), ricettaId, nome: r ? r.nome : "",
-    data: now.toISOString().slice(0, 10),
-    pasto: now.getHours() < 16 ? "pranzo" : "cena",
-    presenti: ui.presenti.slice(), byDevice: DEVICE_ID, ts: now.getTime(), posted: false,
-  };
-  STORICO.push(e); save(LS.storico, STORICO);
-  if (SYNC.on && sync.enabled) postLog("storico", e);
-  toast(`"${e.nome}" segnato! Non tornerà per 7 giorni 👌`);
-  // rimuovi dalla vista proposte
-  ui.proposte = ui.proposte.filter((p) => p.id !== ricettaId);
-  renderProposte(); renderStorico();
+  modalCtx = { kind: "pasto", mode: "new", ricettaId };
+  openModal(pastoFormHTML({ titolo: "L'abbiamo fatto!", ricettaNome: r ? r.nome : "", data: todayISO(), pasto: now.getHours() < 16 ? "pranzo" : "cena", presenti: ui.presenti.slice() }));
+}
+function apriModificaPasto(uid) {
+  const e = STORICO.find((x) => x.uid === uid);
+  if (!e) return;
+  modalCtx = { kind: "pasto", mode: "edit", uid };
+  openModal(pastoFormHTML({ titolo: "Modifica pasto", ricettaNome: nomeRicetta(e.ricettaId), data: e.data || todayISO(), pasto: e.pasto || "pranzo", presenti: (e.presenti || []).slice() }));
+}
+function salvaPasto() {
+  const data = $("#mpData").value || todayISO();
+  const pb = $("#mpPasto .chip.on"); const pasto = pb ? pb.dataset.pasto : "pranzo";
+  const presenti = $$("#mpPresenti .chip.on").map((c) => c.dataset.mp);
+  const tsFor = (d) => { const t = new Date(d + "T12:00:00").getTime(); return isNaN(t) ? Date.now() : t; };
+  if (modalCtx.mode === "new") {
+    const r = RICETTE.find((x) => x.id === modalCtx.ricettaId);
+    const e = { uid: mkUid(DEVICE_ID), ricettaId: modalCtx.ricettaId, nome: r ? r.nome : "", data, pasto, presenti, byDevice: DEVICE_ID, ts: tsFor(data), posted: false };
+    STORICO.push(e); save(LS.storico, STORICO);
+    if (SYNC.on && sync.enabled) postLog("storico", e);
+    ui.proposte = ui.proposte.filter((p) => p.id !== modalCtx.ricettaId);
+    toast("Segnato! Non tornerà per 7 giorni 👌");
+  } else {
+    const e = STORICO.find((x) => x.uid === modalCtx.uid);
+    if (e) {
+      e.data = data; e.pasto = pasto; e.presenti = presenti; e.ts = tsFor(data);
+      save(LS.storico, STORICO);
+      if (SYNC.on && sync.enabled && e.id) sync.patch("storico/" + e.id, { data, pasto, presenti, ts: e.ts });
+    }
+    toast("Pasto aggiornato ✓");
+  }
+  closeModal(); renderProposte(); renderStorico();
+}
+
+// ---- Modifica una RICETTA (ingredienti / preparazione / dettagli) ----
+function ricettaFormHTML(d) {
+  const ing = (d.ingredienti || []).map((i, idx) => `
+    <div class="ed-row" data-i="${idx}">
+      <input class="grow" data-f="nome" value="${esc(i.nome || "")}" placeholder="ingrediente">
+      <input class="q-in" data-f="q" value="${i.q ?? ""}" placeholder="q">
+      <input class="u-in" data-f="unita" value="${esc(i.unita || "")}" placeholder="unità">
+      <button type="button" class="icon-btn" data-rming="${idx}">🗑️</button>
+    </div>`).join("");
+  const steps = (d.passaggi || []).map((p, idx) => `
+    <div class="ed-row" data-i="${idx}">
+      <textarea data-sf="${idx}" rows="2">${esc(p)}</textarea>
+      <button type="button" class="icon-btn" data-rmstep="${idx}">🗑️</button>
+    </div>`).join("");
+  const portOpts = PORTATE.map((p) => `<option value="${p}" ${d.portata === p ? "selected" : ""}>${esc(PORTATA_NOME[p])}</option>`).join("");
+  const diffOpts = ["facile", "media", "difficile"].map((x) => `<option value="${x}" ${d.difficolta === x ? "selected" : ""}>${x}</option>`).join("");
+  return `
+    <h2 class="q">Modifica ricetta</h2>
+    <label class="lbl">Nome</label>
+    <input id="rNome" value="${esc(d.nome || "")}">
+    <div class="row2">
+      <div class="grow"><label class="lbl">Portata</label><select id="rPortata">${portOpts}</select></div>
+      <div class="grow"><label class="lbl">Difficoltà</label><select id="rDiff">${diffOpts}</select></div>
+    </div>
+    <div class="row2">
+      <div class="grow"><label class="lbl">Tempo (min)</label><input id="rTempo" type="number" value="${d.tempoMin ?? ""}"></div>
+      <div class="grow"><label class="lbl">Bimbi</label><label class="switch"><input type="checkbox" id="rBimbi" ${d.adattoBimbi ? "checked" : ""}> adatto</label></div>
+    </div>
+    <label class="lbl">Ingredienti</label>
+    <div id="rIng">${ing}</div>
+    <button type="button" class="btn-ghost small add-line" data-adding>＋ ingrediente</button>
+    <label class="lbl">Preparazione</label>
+    <div id="rSteps">${steps}</div>
+    <button type="button" class="btn-ghost small add-line" data-addstep>＋ passaggio</button>
+    <label class="lbl">Tag (virgola)</label>
+    <input id="rTag" value="${esc((d.tag || []).join(", "))}">
+    <label class="lbl">Stagioni (inverno, primavera, estate, autunno)</label>
+    <input id="rStag" value="${esc((d.stagioni || []).join(", "))}">
+    <div class="cta-row">
+      <button type="button" class="btn-ghost" data-modal-close>Annulla</button>
+      <button type="button" class="btn-primary" id="rSalva">Salva</button>
+    </div>`;
+}
+function apriModificaRicetta(id) {
+  const r = RICETTE.find((x) => x.id === id);
+  if (!r) return;
+  modalCtx = { kind: "ricetta", id, draft: normalizeRicetta(JSON.parse(JSON.stringify(r))) };
+  openModal(ricettaFormHTML(modalCtx.draft));
+}
+function syncDraftFromDOM() {
+  const d = modalCtx.draft;
+  d.nome = $("#rNome").value.trim();
+  d.portata = $("#rPortata").value;
+  d.difficolta = $("#rDiff").value;
+  const t = parseInt($("#rTempo").value, 10); d.tempoMin = isNaN(t) ? null : t;
+  d.adattoBimbi = $("#rBimbi").checked;
+  d.tag = $("#rTag").value.split(",").map((s) => s.trim()).filter(Boolean);
+  d.stagioni = $("#rStag").value.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  d.ingredienti = $$("#rIng .ed-row").map((row) => {
+    const g = (f) => row.querySelector(`[data-f="${f}"]`);
+    const q = g("q").value.trim();
+    return { nome: g("nome").value.trim(), q: q === "" ? null : (isNaN(+q) ? q : +q), unita: g("unita").value.trim(), opzionale: false };
+  }).filter((i) => i.nome);
+  d.passaggi = $$("#rSteps textarea").map((t) => t.value.trim()).filter(Boolean);
+}
+function salvaRicetta() {
+  syncDraftFromDOM();
+  const d = modalCtx.draft;
+  if (!d.nome) { toast("Serve almeno il nome"); return; }
+  const i = RICETTE.findIndex((x) => x.id === modalCtx.id);
+  if (i >= 0) { RICETTE[i] = { ...RICETTE[i], ...d }; save(LS.ricette, RICETTE);
+    if (SYNC.on && sync.enabled) { const { id, ...rest } = RICETTE[i]; sync.put("ricette/" + id, rest); } }
+  closeModal(); renderRicettario(); toast("Ricetta aggiornata ✓");
 }
 
 function rimuoviRicetta(id) {
@@ -484,7 +610,7 @@ function wire() {
   $("#ingChips").addEventListener("click", (e) => { const c = e.target.closest("[data-ing]"); if (!c) return; ui.ingredienti.splice(+c.dataset.ing, 1); saveUI(); renderIngChips(); });
   $("#proponiBtn").addEventListener("click", () => doProponi(false));
   $("#rimescolaBtn").addEventListener("click", () => doProponi(true));
-  $("#proposte").addEventListener("click", (e) => { const b = e.target.closest("[data-fatto]"); if (b) segnaFatto(b.dataset.fatto); });
+  $("#proposte").addEventListener("click", (e) => { const b = e.target.closest("[data-fatto]"); if (b) apriRegistraPasto(b.dataset.fatto); });
 
   // RICETTARIO
   $("#cercaRic").addEventListener("input", (e) => { ui.cerca = e.target.value; renderRicettario(); });
@@ -493,11 +619,12 @@ function wire() {
     const b = e.target.closest("[data-apri]") || e.target.closest("[data-ricetta]"); if (!b) return;
     const id = b.dataset.apri || b.dataset.ricetta;
     const det = $("#det-" + CSS.escape(id)); if (!det) return;
-    if (det.hidden) { const r = RICETTE.find((x) => x.id === id); det.innerHTML = ricettaCardHTML(normalizeRicetta(r), { actions: true, remove: true }); det.hidden = false; }
+    if (det.hidden) { const r = RICETTE.find((x) => x.id === id); det.innerHTML = ricettaCardHTML(normalizeRicetta(r), { actions: true, edit: true, remove: true }); det.hidden = false; }
     else det.hidden = true;
   });
-  $("#listaRicette").addEventListener("click", (e) => { const b = e.target.closest("[data-fatto]"); if (b) segnaFatto(b.dataset.fatto); });
+  $("#listaRicette").addEventListener("click", (e) => { const b = e.target.closest("[data-fatto]"); if (b) apriRegistraPasto(b.dataset.fatto); });
   $("#listaRicette").addEventListener("click", (e) => { const b = e.target.closest("[data-rimuovi]"); if (b) rimuoviRicetta(b.dataset.rimuovi); });
+  $("#listaRicette").addEventListener("click", (e) => { const b = e.target.closest("[data-modifica]"); if (b) apriModificaRicetta(b.dataset.modifica); });
 
   // INSEGNA
   $("#obsTipo").addEventListener("change", (e) => { ui.obsTipo = e.target.value; saveUI(); renderInsegnaForm(); });
@@ -511,6 +638,7 @@ function wire() {
   });
 
   // STORICO
+  $("#listaStorico").addEventListener("click", (e) => { const b = e.target.closest("[data-editstorico]"); if (b) apriModificaPasto(b.dataset.editstorico); });
   $("#listaStorico").addEventListener("click", (e) => {
     const b = e.target.closest("[data-delstorico]"); if (!b) return;
     const uid = b.dataset.delstorico; const ev = STORICO.find((x) => x.uid === uid);
@@ -564,6 +692,24 @@ function wire() {
   $("#exportBtn").addEventListener("click", doExport);
   $("#importBtn").addEventListener("click", () => $("#importFile").click());
   $("#importFile").addEventListener("change", (e) => { if (e.target.files[0]) doImport(e.target.files[0]); e.target.value = ""; });
+
+  // MODALE (delega unica per pasto + editor ricetta)
+  $("#modal").addEventListener("click", (e) => {
+    if (e.target.id === "modal") { closeModal(); return; }                 // click sullo sfondo
+    if (e.target.closest("[data-modal-close]")) { closeModal(); return; }
+    // form PASTO
+    const pasto = e.target.closest("[data-pasto]");
+    if (pasto) { $$("#mpPasto .chip").forEach((c) => c.classList.remove("on")); pasto.classList.add("on"); return; }
+    const mp = e.target.closest("[data-mp]"); if (mp) { mp.classList.toggle("on"); return; }
+    if (e.target.closest("#mpSalva")) { salvaPasto(); return; }
+    // form RICETTA
+    if (e.target.closest("[data-adding]")) { syncDraftFromDOM(); modalCtx.draft.ingredienti.push({ nome: "", q: null, unita: "", opzionale: false }); openModal(ricettaFormHTML(modalCtx.draft)); return; }
+    const rming = e.target.closest("[data-rming]"); if (rming) { syncDraftFromDOM(); modalCtx.draft.ingredienti.splice(+rming.dataset.rming, 1); openModal(ricettaFormHTML(modalCtx.draft)); return; }
+    if (e.target.closest("[data-addstep]")) { syncDraftFromDOM(); modalCtx.draft.passaggi.push(""); openModal(ricettaFormHTML(modalCtx.draft)); return; }
+    const rmstep = e.target.closest("[data-rmstep]"); if (rmstep) { syncDraftFromDOM(); modalCtx.draft.passaggi.splice(+rmstep.dataset.rmstep, 1); openModal(ricettaFormHTML(modalCtx.draft)); return; }
+    if (e.target.closest("#rSalva")) { salvaRicetta(); return; }
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#modal").hidden) closeModal(); });
 }
 
 // ---------------------------------------------------------------------------
