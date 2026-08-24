@@ -6,7 +6,7 @@ import {
 } from "./engine.js";
 import { Sync, load, save, mkUid, newDeviceId, mergeLog } from "./sync.js";
 
-const APP_VERSION = "v6";
+const APP_VERSION = "v7";
 
 // ---------------------------------------------------------------------------
 // Chiavi localStorage + stato
@@ -355,8 +355,18 @@ function renderDispensa() {
   $("#dispChips").innerHTML = DISPENSA.map((d, i) =>
     `<span class="chip rm" data-disp="${i}">${esc(d)} <span class="x">✕</span></span>`).join("");
 }
+function regolaTesto(r) { return typeof r === "string" ? r : (r && r.testo) || ""; }
+function renderRegole() {
+  const box = $("#regoleList");
+  if (!REGOLE.length) { box.innerHTML = `<div class="empty">Ancora nessuna regola.</div>`; return; }
+  box.innerHTML = REGOLE.map((r, i) => `
+    <div class="riga">
+      <div class="r-main"><div class="r-sub">📏 ${esc(regolaTesto(r))}</div></div>
+      <button class="icon-btn" data-delregola="${i}">🗑️</button>
+    </div>`).join("");
+}
 function renderImpostazioni() {
-  renderProfili(); renderDispensa();
+  renderProfili(); renderDispensa(); renderRegole();
   $("#syncUrl").value = SYNC.url || "";
   $("#syncCode").value = SYNC.code || "";
   $("#syncOn").checked = !!SYNC.on;
@@ -683,6 +693,12 @@ function wire() {
   $("#dispAdd").addEventListener("click", addDisp);
   $("#dispInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addDisp(); } });
   $("#dispChips").addEventListener("click", (e) => { const c = e.target.closest("[data-disp]"); if (!c) return; DISPENSA.splice(+c.dataset.disp, 1); save(LS.dispensa, DISPENSA); pushDoc("dispensa", DISPENSA); renderDispensa(); });
+
+  // IMPOSTAZIONI: regole
+  const addRegola = () => { const v = $("#regolaInput").value.trim(); if (!v) return; REGOLE.push(v); $("#regolaInput").value = ""; save(LS.regole, REGOLE); pushDoc("regole", REGOLE); renderRegole(); toast("Regola aggiunta ✓"); };
+  $("#regolaAdd").addEventListener("click", addRegola);
+  $("#regolaInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addRegola(); } });
+  $("#regoleList").addEventListener("click", (e) => { const b = e.target.closest("[data-delregola]"); if (!b) return; REGOLE.splice(+b.dataset.delregola, 1); save(LS.regole, REGOLE); pushDoc("regole", REGOLE); renderRegole(); });
 
   // IMPOSTAZIONI: sync + modello
   const applySync = () => {
