@@ -6,7 +6,7 @@ import {
 } from "./engine.js";
 import { Sync, load, save, mkUid, newDeviceId, mergeLog } from "./sync.js";
 
-const APP_VERSION = "v9";
+const APP_VERSION = "v10";
 
 // ---------------------------------------------------------------------------
 // Chiavi localStorage + stato
@@ -277,22 +277,28 @@ function renderFiltriPortata() {
 function renderRicettario() {
   renderFiltriPortata();
   const q = norm(ui.cerca);
+  // "NEW" = ricette dell'ultimo lotto (createdAt massimo). Calcolato su TUTTO il
+  // ricettario, così il badge non dipende dal filtro selezionato.
+  const maxTs = RICETTE.reduce((m, r) => Math.max(m, r.createdAt || 0), 0);
   let list = RICETTE.map(normalizeRicetta);
   if (ui.filtroPortata !== "tutte") list = list.filter((r) => r.portata === ui.filtroPortata);
   if (q) list = list.filter((r) => norm(r.nome).includes(q) || r.ingredienti.some((i) => norm(i.nome).includes(q)));
-  list.sort((a, b) => a.nome.localeCompare(b.nome, "it"));
+  // ordinamento: più recenti in alto (per data di inserimento), poi per nome
+  list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0) || a.nome.localeCompare(b.nome, "it"));
   const box = $("#listaRicette");
   if (!list.length) { box.innerHTML = `<div class="card empty">Nessuna ricetta trovata.</div>`; return; }
-  box.innerHTML = list.map((r) => `
+  box.innerHTML = list.map((r) => {
+    const isNew = maxTs > 0 && (r.createdAt || 0) === maxTs;
+    return `
     <div class="riga" data-ricetta="${esc(r.id)}">
       <div class="r-main">
-        <div class="r-title">${esc(r.nome)}</div>
+        <div class="r-title">${esc(r.nome)}${isNew ? ' <span class="new-badge">NEW</span>' : ""}</div>
         <div class="r-sub">${esc(PORTATA_NOME[r.portata] || r.portata)}${r.tempoMin ? " · " + r.tempoMin + " min" : ""}${r.adattoBimbi ? " · 🍼" : ""}</div>
       </div>
       <button class="icon-btn" data-apri="${esc(r.id)}">›</button>
     </div>
-    <div class="det" id="det-${esc(r.id)}" hidden></div>
-  `).join("");
+    <div class="det" id="det-${esc(r.id)}" hidden></div>`;
+  }).join("");
 }
 
 // ---------------------------------------------------------------------------

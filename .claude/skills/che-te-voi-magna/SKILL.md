@@ -74,7 +74,7 @@ Per **ogni** osservazione pending, in base a `tipo`:
   "adattoBimbi": true,
   "stagioni": ["estate"],
   "fonte": { "tipo": "generata|importata", "url": "opzionale" },
-  "createdAt": 0
+  "createdAt": 1712345678901
 }
 ```
 
@@ -87,6 +87,9 @@ Per **ogni** osservazione pending, in base a `tipo`:
    semmai aggiornale.
 6. `id` = slug del nome (minuscolo, trattini, senza accenti), es. "Pasta alla Norma" →
    `pasta-alla-norma`. Se collide con una diversa, aggiungi un suffisso.
+7. **`createdAt`**: cattura UNA volta all'inizio l'epoch in **millisecondi** (bash: `date +%s%3N`)
+   e usa lo STESSO valore per TUTTE le ricette create/importate in questa run. Serve all'app per
+   ordinarle (più recenti in alto) e per il badge **"NEW"** (marca l'ultimo lotto). Non usare 0.
 
 ## Passo 3 — Scrivi i risultati
 

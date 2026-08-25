@@ -49,8 +49,10 @@ jobs:
                Niente doppioni con le ricette esistenti.
             5) Schema ricetta: {nome, portata (antipasto|primo|secondo|contorno|dolce),
                ingredienti:[{nome,q,unita,opzionale}], passaggi:[...], tempoMin, difficolta, tag:[...],
-               adattoBimbi, stagioni:[...], fonte:{tipo:"generata"|"importata",url?}, createdAt:0}.
+               adattoBimbi, stagioni:[...], fonte:{tipo:"generata"|"importata",url?}, createdAt:NOW}.
                id = slug del nome (minuscolo, trattini, senza accenti).
+               NOW: cattura all'inizio NOW=$(date +%s%3N) e usa lo STESSO valore come createdAt per
+               TUTTE le ricette create/importate in questa run (serve per ordinamento e badge NEW).
             6) Scrivi ogni ricetta con: curl -s -X PUT "$BASE/ricette/<id>.json"
                -H "Content-Type: application/json; charset=utf-8" --data-binary @file.json
                Aggiorna regole/dispensa con PUT se cambiate.
