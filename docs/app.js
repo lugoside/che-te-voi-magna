@@ -7,7 +7,7 @@ import {
 } from "./engine.js";
 import { Sync, load, save, mkUid, newDeviceId, mergeLog } from "./sync.js";
 
-const APP_VERSION = "v12";
+const APP_VERSION = "v13";
 
 // ---------------------------------------------------------------------------
 // Chiavi localStorage + stato
@@ -414,13 +414,29 @@ function fmtBreve(s) { const d = parseYMD(s); return `${GIORNI[d.getDay()]} ${d.
 function fmtLungo(s) { const d = parseYMD(s); return `${GIORNI[d.getDay()]} ${d.getDate()} ${MESI[d.getMonth()]}`; }
 
 function pianoSlot(data, pasto) { return PIANO.find((x) => x.data === data && x.pasto === pasto); }
+const STATI = [["programma", "In programma"], ["dispensa", "Ho gli ingredienti"], ["fatto", "Fatto"]];
+const statoLabel = (s) => (STATI.find(([k]) => k === (s || "programma")) || STATI[0])[1];
+
+// STORICO "gemello" (stessa uid) di un pasto Fatto → Piano e Storico coincidono.
+function syncTwin(e) {
+  const r = RICETTE.find((x) => x.id === e.ricettaId);
+  const body = { ricettaId: e.ricettaId, nome: r ? r.nome : "", data: e.data, pasto: e.pasto, presenti: (e.presenti || Object.keys(PROFILI)).slice(), ospiti: e.ospiti || 0 };
+  const tw = STORICO.find((x) => x.uid === e.uid);
+  if (tw) { Object.assign(tw, body); save(LS.storico, STORICO); if (SYNC.on && sync.enabled && tw.id) sync.patch("storico/" + tw.id, body); }
+  else { const nw = { uid: e.uid, ...body, byDevice: DEVICE_ID, ts: tsFor(e.data), posted: false }; STORICO.push(nw); save(LS.storico, STORICO); if (SYNC.on && sync.enabled) postLog("storico", nw); }
+}
+function removeTwin(uid) {
+  const tw = STORICO.find((x) => x.uid === uid); if (!tw) return;
+  STORICO = STORICO.filter((x) => x.uid !== uid); save(LS.storico, STORICO);
+  if (tw.id) deleteFromCloud("storico", tw.id);
+}
 function setPiano(data, pasto, ricettaId) {
   const prev = pianoSlot(data, pasto);
   const presenti = prev && Array.isArray(prev.presenti) ? prev.presenti : Object.keys(PROFILI);
   const ospiti = prev && prev.ospiti != null ? prev.ospiti : 0;
-  for (const e of PIANO.filter((x) => x.data === data && x.pasto === pasto)) if (e.id) deleteFromCloud("piano", e.id);
+  for (const e of PIANO.filter((x) => x.data === data && x.pasto === pasto)) { if (e.stato === "fatto") removeTwin(e.uid); if (e.id) deleteFromCloud("piano", e.id); }
   PIANO = PIANO.filter((x) => !(x.data === data && x.pasto === pasto));
-  const e = { uid: mkUid(DEVICE_ID), data, pasto, ricettaId, presenti, ospiti, byDevice: DEVICE_ID, ts: Date.now(), posted: false };
+  const e = { uid: mkUid(DEVICE_ID), data, pasto, ricettaId, presenti, ospiti, stato: "programma", byDevice: DEVICE_ID, ts: Date.now(), posted: false };
   PIANO.push(e); save(LS.piano, PIANO);
   if (SYNC.on && sync.enabled) postLog("piano", e);
 }
@@ -428,19 +444,20 @@ function updatePianoMeal(uid, patch) {
   const e = PIANO.find((x) => x.uid === uid); if (!e) return;
   Object.assign(e, patch); save(LS.piano, PIANO);
   if (SYNC.on && sync.enabled && e.id) sync.patch("piano/" + e.id, patch);
+  if (e.stato === "fatto") syncTwin(e); // tieni allineato il gemello nello storico
+}
+function setPianoStato(uid, stato) {
+  const e = PIANO.find((x) => x.uid === uid); if (!e) return;
+  e.stato = stato; save(LS.piano, PIANO);
+  if (SYNC.on && sync.enabled && e.id) sync.patch("piano/" + e.id, { stato });
+  if (stato === "fatto") syncTwin(e); else removeTwin(uid);
+  renderStorico();
 }
 function rimuoviPiano(uid) {
   const e = PIANO.find((x) => x.uid === uid);
+  if (e && e.stato === "fatto") removeTwin(uid);
   PIANO = PIANO.filter((x) => x.uid !== uid); save(LS.piano, PIANO);
   if (e && e.id) deleteFromCloud("piano", e.id);
-}
-function pianoFatto(uid) {
-  const e = PIANO.find((x) => x.uid === uid); if (!e) return;
-  const r = RICETTE.find((x) => x.id === e.ricettaId);
-  const ev = { uid: mkUid(DEVICE_ID), ricettaId: e.ricettaId, nome: r ? r.nome : "", data: e.data, pasto: e.pasto, presenti: (e.presenti || ui.presenti).slice(), ospiti: e.ospiti || 0, byDevice: DEVICE_ID, ts: tsFor(e.data), posted: false };
-  STORICO.push(ev); save(LS.storico, STORICO);
-  if (SYNC.on && sync.enabled) postLog("storico", ev);
-  rimuoviPiano(uid);
 }
 
 function slotHTML(data, pasto) {
@@ -449,7 +466,9 @@ function slotHTML(data, pasto) {
   if (e) {
     const r = RICETTE.find((x) => x.id === e.ricettaId);
     const osp = e.ospiti ? ` <span class="slot-osp">+${e.ospiti}👥</span>` : "";
-    return `<button type="button" class="slot filled" data-voce="${esc(e.uid)}"><span class="slot-lbl">${lbl}</span><span class="slot-ric">${esc(r ? r.nome : "(rimossa)")}${osp}</span></button>`;
+    const badge = e.stato === "fatto" ? ` <span class="slot-badge">✅</span>` : e.stato === "dispensa" ? ` <span class="slot-badge">🧺</span>` : "";
+    const cls = e.stato === "fatto" ? " done" : "";
+    return `<button type="button" class="slot filled${cls}" data-voce="${esc(e.uid)}"><span class="slot-lbl">${lbl}</span><span class="slot-ric">${esc(r ? r.nome : "(rimossa)")}${badge}${osp}</span></button>`;
   }
   return `<button type="button" class="slot empty" data-slot="${data}|${pasto}"><span class="slot-lbl">${lbl}</span><span class="slot-add">＋</span></button>`;
 }
@@ -554,11 +573,15 @@ function voceHTML(uid) {
     const nr = normalizeRicetta(r);
     const f = comm / (nr.porzioni || PORZIONI_BASE);
     const ing = senzaDispensa(scalaIngredienti(nr.ingredienti, f));
-    ingHtml = `<div class="sez-tit">Ingredienti (per ${comm})</div><ul class="ingredienti">${ing.map(fmtIngrediente).join("")}</ul>`;
+    ingHtml = `<div class="sez-tit">Ingredienti (per ${comm})</div><ul class="ingredienti">${ing.map(fmtIngrediente).join("")}</ul>
+      <div class="sez-tit">Preparazione</div><ol class="passaggi">${(nr.passaggi || []).map((p) => `<li>${esc(p)}</li>`).join("")}</ol>`;
   }
+  const statoChips = STATI.map(([k, l]) => `<button type="button" class="chip ${(e.stato || "programma") === k ? "on" : ""}" data-statopiano="${k}">${l}</button>`).join("");
   return `
     <h2 class="q">${e.pasto === "pranzo" ? "☀️ Pranzo" : "🌙 Cena"} · ${esc(fmtLungo(e.data))}</h2>
     <p class="hint">🍽️ ${esc(r ? r.nome : "(ricetta rimossa)")}</p>
+    <label class="lbl">Stato</label>
+    <div class="chips" id="statoChips">${statoChips}</div>
     <label class="lbl">Chi c'è</label>
     <div class="chips" id="vpChips">${chips}</div>
     <div class="ospiti-row"><span class="ospiti-lbl">👥 + Ospiti</span>
@@ -566,8 +589,7 @@ function voceHTML(uid) {
       <span class="hint" style="margin-left:auto">Commensali: <b>${comm}</b></span></div>
     ${ingHtml}
     <div class="cta-row" style="flex-wrap:wrap">
-      <button type="button" class="btn-ghost" data-voce-cambia>🔄 Cambia</button>
-      <button type="button" class="btn-ghost" data-voce-fatto>✅ Fatto</button>
+      <button type="button" class="btn-ghost" data-voce-cambia>🔄 Cambia ricetta</button>
       <button type="button" class="btn-ghost danger" data-voce-rimuovi>🗑️ Rimuovi</button>
     </div>
     <div class="cta-row"><button type="button" class="btn-ghost" data-modal-close>Chiudi</button></div>`;
@@ -709,6 +731,9 @@ function salvaPasto() {
       e.data = data; e.pasto = pasto; e.presenti = presenti; e.ospiti = modalCtx.ospiti || 0; e.ts = tsFor(data);
       save(LS.storico, STORICO);
       if (SYNC.on && sync.enabled && e.id) sync.patch("storico/" + e.id, { data, pasto, presenti, ospiti: e.ospiti, ts: e.ts });
+      // se è il gemello di un pasto del Piano, allinealo
+      const pe = PIANO.find((x) => x.uid === modalCtx.uid);
+      if (pe) { Object.assign(pe, { data, pasto, presenti, ospiti: modalCtx.ospiti || 0 }); save(LS.piano, PIANO); if (SYNC.on && sync.enabled && pe.id) sync.patch("piano/" + pe.id, { data, pasto, presenti, ospiti: pe.ospiti }); }
     }
     toast("Pasto aggiornato ✓");
   }
@@ -919,6 +944,9 @@ function wire() {
     const uid = b.dataset.delstorico; const ev = STORICO.find((x) => x.uid === uid);
     STORICO = STORICO.filter((x) => x.uid !== uid); save(LS.storico, STORICO);
     if (ev && ev.id) deleteFromCloud("storico", ev.id);
+    // se è il gemello di un pasto Fatto del Piano, riportalo a "In programma"
+    const pe = PIANO.find((x) => x.uid === uid);
+    if (pe && pe.stato === "fatto") { pe.stato = "programma"; save(LS.piano, PIANO); if (SYNC.on && sync.enabled && pe.id) sync.patch("piano/" + pe.id, { stato: "programma" }); renderPiano(); }
     renderStorico(); renderProposte();
   });
 
@@ -1009,8 +1037,8 @@ function wire() {
     if (e.target.closest("[data-proponi-slot]")) { proponiPerSlot(); return; }
     const vp = e.target.closest("[data-vp]"); if (vp) { const en = PIANO.find((x) => x.uid === modalCtx.uid); if (en) { const set = new Set(Array.isArray(en.presenti) ? en.presenti : Object.keys(PROFILI)); const k = vp.dataset.vp; set.has(k) ? set.delete(k) : set.add(k); updatePianoMeal(modalCtx.uid, { presenti: [...set] }); openModal(voceHTML(modalCtx.uid)); renderPiano(); } return; }
     const vo = e.target.closest("[data-vosp]"); if (vo) { const en = PIANO.find((x) => x.uid === modalCtx.uid); if (en) { updatePianoMeal(modalCtx.uid, { ospiti: Math.max(0, (en.ospiti || 0) + Number(vo.dataset.vosp)) }); openModal(voceHTML(modalCtx.uid)); renderPiano(); } return; }
+    const sp = e.target.closest("[data-statopiano]"); if (sp) { setPianoStato(modalCtx.uid, sp.dataset.statopiano); openModal(voceHTML(modalCtx.uid)); renderPiano(); toast("Stato: " + statoLabel(sp.dataset.statopiano)); return; }
     if (e.target.closest("[data-voce-cambia]")) { apriSlotPicker(modalCtx.data, modalCtx.pasto); return; }
-    if (e.target.closest("[data-voce-fatto]")) { pianoFatto(modalCtx.uid); closeModal(); renderPiano(); renderStorico(); toast("Segnato come fatto ✓"); return; }
     if (e.target.closest("[data-voce-rimuovi]")) { rimuoviPiano(modalCtx.uid); closeModal(); renderPiano(); return; }
     if (e.target.closest("[data-spesa-copia]")) {
       const its = listaSpesa({ piano: PIANO, ricette: RICETTE, dispensa: DISPENSA, oggi: new Date(), porzioniBase: PORZIONI_BASE });

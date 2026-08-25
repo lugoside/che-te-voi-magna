@@ -237,6 +237,8 @@ ol.passaggi li { margin: 5px 0; font-size: 14px; }
 .ospiti-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 .ospiti-lbl { font-weight: 700; font-size: 14px; }
 .slot-osp { color: var(--accent); font-weight: 700; font-size: 12px; }
+.slot-badge { font-size: 12px; }
+.slot.done { opacity: .6; }
 
 /* ---------- toast ---------- */
 .toast {

@@ -126,6 +126,15 @@ const PIANO2 = [{ uid: "z", data: "2026-08-26", pasto: "cena", ricettaId: "a", o
 const spesa2 = listaSpesa({ piano: PIANO2, ricette: RIC_SPESA, dispensa: ["sale"], oggi: OGGI, porzioniBase: 3 });
 // commensali = 3(base, presenti non impostati) + 3 ospiti = 6 → fattore 2 → pasta 200*2
 eq(spesa2.find((x) => x.nome === "pasta").quantita, "400 g", "pasta scalata x2 con 3 ospiti");
+// stato: solo "programma" entra in spesa
+const PIANO3 = [
+  { uid: "s1", data: "2026-08-26", pasto: "cena", ricettaId: "a", stato: "programma" },
+  { uid: "s2", data: "2026-08-27", pasto: "cena", ricettaId: "b", stato: "fatto" },
+  { uid: "s3", data: "2026-08-28", pasto: "cena", ricettaId: "b", stato: "dispensa" },
+];
+const spesa3 = listaSpesa({ piano: PIANO3, ricette: RIC_SPESA, dispensa: ["sale"], oggi: OGGI });
+ok(spesa3.some((x) => x.nome === "pasta"), "ricetta 'programma' inclusa");
+ok(!spesa3.some((x) => x.nome === "tonno"), "ricette 'fatto'/'dispensa' escluse dalla spesa");
 
 // --- esito -----------------------------------------------------------------
 console.log(`\n${pass} passati, ${fail} falliti`);

@@ -323,6 +323,7 @@ export function listaSpesa(opts = {}) {
 
   for (const p of piano) {
     if (!p || !p.data || p.data < oggiStr) continue; // solo oggi/futuro
+    if (p.stato && p.stato !== "programma") continue;  // solo "In programma" va in spesa
     const r = byId.get(p.ricettaId);
     if (!r) continue;
     const f = commensaliDi(p, base) / (r.porzioni || base); // scala per commensali
