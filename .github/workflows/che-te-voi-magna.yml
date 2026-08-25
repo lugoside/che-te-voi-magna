@@ -1,0 +1,59 @@
+name: Che te voi magnà — processa coda
+
+# Lanciabile a mano dall'app GitHub (Actions → Run workflow), anche dal telefono.
+# Processa la coda di osservazioni di "Che te voi magnà" con Claude Code, a costo zero:
+#   - repo pubblico -> minuti Actions gratuiti
+#   - autenticazione con il token della sottoscrizione Claude (nessun addebito API)
+# L'endpoint Firebase (URL + codice famiglia) sta nel secret FIREBASE_BASE, non nel codice.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  processa-coda:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Processa la coda con Claude Code
+        uses: anthropics/claude-code-action@v1
+        env:
+          BASE: ${{ secrets.FIREBASE_BASE }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: '--allowedTools Bash,WebFetch,Read,Write,Glob,Grep'
+          prompt: |
+            Processa la coda di osservazioni dell'app "Che te voi magnà" seguendo le istruzioni in
+            .claude/skills/che-te-voi-magna/SKILL.md (il repo è già presente in questa cartella).
+
+            L'endpoint Firebase completo (URL + codice famiglia) è nella variabile d'ambiente BASE.
+            NON stamparla nei log. Usala direttamente in curl, es. "$BASE/coda.json".
+
+            Passi:
+            1) GET "$BASE/coda.json", "$BASE/ricette.json", "$BASE/regole.json", "$BASE/dispensa.json".
+            2) Se la coda è vuota o non ci sono voci con stato diverso da "processed", fermati e dillo.
+            3) Per ogni voce pending:
+               - tipo "nuova-ricetta": genera la/e ricetta/e chieste nel campo "testo" (stile casereccio,
+                 quantità per ~2 adulti + 1 bimbo, passaggi brevi in italiano).
+               - tipo "importa-url": scarica l'URL con WebFetch ed estrai la ricetta.
+               - tipo "regola": aggiungi la regola all'array regole (e alla dispensa se sono staple).
+               - tipo "correzione": correggi la ricetta citata.
+            4) REGOLE FISSE: NON elencare olio, sale, acqua, pepe (né gli elementi in dispensa) tra gli
+               "ingredienti", ma usali nei "passaggi" dove servono. Rispetta correttamente "adattoBimbi".
+               Niente doppioni con le ricette esistenti.
+            5) Schema ricetta: {nome, portata (antipasto|primo|secondo|contorno|dolce),
+               ingredienti:[{nome,q,unita,opzionale}], passaggi:[...], tempoMin, difficolta, tag:[...],
+               adattoBimbi, stagioni:[...], fonte:{tipo:"generata"|"importata",url?}, createdAt:0}.
+               id = slug del nome (minuscolo, trattini, senza accenti).
+            6) Scrivi ogni ricetta con: curl -s -X PUT "$BASE/ricette/<id>.json"
+               -H "Content-Type: application/json; charset=utf-8" --data-binary @file.json
+               Aggiorna regole/dispensa con PUT se cambiate.
+            7) Marca ogni voce processata con: curl -s -X PATCH "$BASE/coda/<pushId>.json"
+               -H "Content-Type: application/json; charset=utf-8" -d '{"stato":"processed"}'
+            8) Stampa un riepilogo finale (senza mai mostrare BASE): quante osservazioni processate,
+               quali ricette create/aggiornate, regole/dispensa modificate.
