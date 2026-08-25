@@ -21,6 +21,30 @@ export const PORTATA_NOME = {
   contorno: "Contorno",
   dolce: "Dolce",
 };
+// reparti del supermercato, in ordine di spesa
+export const REPARTI = [
+  "Frutta e verdura", "Carne e salumi", "Pesce e frutti di mare", "Latticini e uova",
+  "Pane e panetteria", "Pasta, riso e cereali", "Scatolame e conserve",
+  "Dispensa, dolci e spezie", "Surgelati", "Altro",
+];
+// classificatore per parola chiave (ordine = priorità: il primo match vince)
+const REPARTO_MATCH = [
+  ["Pesce e frutti di mare", ["salmone", "merluzzo", "nasello", "vongol", "cozze", "gamber", "calamar", "frutti di mare", "misto di mare", "misto mare", "platessa", "orata", "branzino", "seppie", "polpo", "spigola", "trota", "pesce"]],
+  ["Carne e salumi", ["pollo", "sovracosce", "macinat", "manzo", "vitello", "girello", "salsiccia", "speck", "prosciutto", "pancetta", "bresaola", "wurstel", "hamburger", "bistecc", "tacchino", "carne", "cotolett", "spezzatino", "arrosto"]],
+  ["Scatolame e conserve", ["passata", "pelati", "concentrato di pomodoro", "tonno", "acciugh", "capperi", "oliv", "mais", "fagiol", "ceci", "lenticch", "legumi", "sottolio", "sottaceti", "in scatola"]],
+  ["Latticini e uova", ["latte", "uova", "uovo", "mozzarell", "parmigian", "pecorin", "ricotta", "burro", "yogurt", "mascarpone", "panna", "formaggio", "stracchino", "scamorza", "fontina", "provola", "gorgonzola", "philadelphia"]],
+  ["Pane e panetteria", ["pane", "pangrattat", "grissini", "crostini", "savoiard", "biscott", "fette biscottate", "piadina", "tortilla", "focaccia"]],
+  ["Pasta, riso e cereali", ["pasta", "spaghett", "tonnarell", "lasagn", "riso", "cereali", "farro", "orzo", "gnocch", "couscous", "polenta", "fusilli", "penne", "tagliatell", "maccheroni", "tortellini", "ravioli"]],
+  ["Frutta e verdura", ["zucc", "pomodor", "patat", "cipoll", "aglio", "insalat", "fungh", "champignon", "mela", "mele", "banan", "limone", "melone", "arance", "basilico", "prezzemolo", "rosmarino", "salvia", "carot", "sedano", "melanzan", "peperon", "spinac", "fagiolini", "piselli", "cavolfiore", "cavolo", "broccol", "minestrone", "verdur", "aneto", "zenzero", "porri", "finocchi", "radicchio", "rucola", "fragole", "pere", "pesche", "uva", "misto minestrone"]],
+  ["Dispensa, dolci e spezie", ["farina", "zucchero", "lievito", "cacao", "miele", "marmellata", "confettura", "aceto", "zafferano", "tahina", "pesto", "brodo", "caffe", "besciamella", "ragu", "noci", "nocciole", "mandorle", "pinoli", "vaniglia", "cannella", "cioccolat", "vino", "curry", "paprika", "semi", "gelatina", "amido"]],
+  ["Surgelati", ["surgelat", "gelato"]],
+];
+export function repartoDi(nome) {
+  const n = norm(nome);
+  for (const [rep, kws] of REPARTO_MATCH) if (kws.some((k) => n.includes(norm(k)))) return rep;
+  return "Altro";
+}
+
 export const NO_REPEAT_GIORNI = 7; // niente ripetizioni entro 7 giorni
 // finestra "morbida" più lunga: piatti fatti da poco (ma oltre i 7 gg) vengono
 // leggermente penalizzati per favorire la rotazione, senza escluderli.
@@ -267,39 +291,64 @@ export function proponi(opts = {}) {
 // opts = { piano, ricette, dispensa, oggi }
 // Ritorna [{ nome, quantita, fonti:[nomiRicetta] }] ordinato per nome.
 // ---------------------------------------------------------------------------
+// unità "a pezzi" (arrotondate a intero); g/ml a multipli di 5; le altre a 1 decimale
+const UNITA_CONTA = ["pz", "uovo", "uova", "spicchio", "spicchi", "fetta", "fette", "rametto", "rametti", "bustina", "foglia", "foglie", "ciuffo", "costa", "coste", "manciata", "bicchiere", "cucchiaio", "cucchiai", "cucchiaino", "cucchiaini", "q.b."];
+function roundQ(v, unita) {
+  const u = norm(unita);
+  if (u === "g" || u === "ml") return Math.max(5, Math.round(v / 5) * 5);
+  if (u === "" || UNITA_CONTA.includes(u)) return Math.max(1, Math.round(v));
+  return Math.round(v * 10) / 10;
+}
+// scala una quantità per un fattore (q null resta null)
+export function scalaQ(q, unita, f) { return typeof q === "number" ? roundQ(q * f, unita) : q; }
+export function scalaIngredienti(ingredienti, fattore) {
+  return (ingredienti || []).map((i) => ({ ...i, q: scalaQ(i.q, i.unita, fattore) }));
+}
+
+// PORZIONI base: quante persone servono le quantità scritte nelle ricette.
+export const PORZIONI_BASE = 3;
+// commensali di un pasto pianificato = familiari presenti (o base) + ospiti
+export function commensaliDi(p, base = PORZIONI_BASE) {
+  const fam = Array.isArray(p.presenti) && p.presenti.length ? p.presenti.length : base;
+  return fam + (p.ospiti || 0);
+}
+
 export function listaSpesa(opts = {}) {
   const oggiStr = ymd(opts.oggi ? new Date(opts.oggi) : new Date());
+  const base = opts.porzioniBase || PORZIONI_BASE;
   const dispSet = (opts.dispensa || []).map(norm).filter(Boolean);
   const byId = new Map(toList(opts.ricette).map((r) => [r.id, normalizeRicetta(r)]));
   const piano = toList(opts.piano);
-  const items = new Map(); // norm(nome) -> { nome, units: Map(unita->somma|null), fonti:Set }
+  const items = new Map(); // norm(nome) -> { nome, units, fonti, reparto }
 
   for (const p of piano) {
     if (!p || !p.data || p.data < oggiStr) continue; // solo oggi/futuro
     const r = byId.get(p.ricettaId);
     if (!r) continue;
+    const f = commensaliDi(p, base) / (r.porzioni || base); // scala per commensali
     for (const ing of r.ingredienti) {
       const n = norm(ing.nome);
       if (!n) continue;
       if (dispSet.some((d) => n === d || n.includes(d))) continue; // salta dispensa
-      if (!items.has(n)) items.set(n, { nome: ing.nome, units: new Map(), fonti: new Set() });
+      if (!items.has(n)) items.set(n, { nome: ing.nome, units: new Map(), fonti: new Set(), reparto: repartoDi(ing.nome) });
       const it = items.get(n);
       it.fonti.add(r.nome);
       const u = (ing.unita || "").trim();
       const q = typeof ing.q === "number" ? ing.q : null;
       if (q == null) it.units.set("__qb__", null);
-      else it.units.set(u, (it.units.get(u) || 0) + q);
+      else it.units.set(u, (it.units.get(u) || 0) + q * f);
     }
   }
 
   const out = [];
   for (const it of items.values()) {
     const parts = [];
-    for (const [u, q] of it.units) { if (u === "__qb__") continue; parts.push(`${+q.toFixed(2)}${u ? " " + u : ""}`); }
+    for (const [u, q] of it.units) { if (u === "__qb__") continue; parts.push(`${roundQ(q, u)}${u ? " " + u : ""}`); }
     if (it.units.has("__qb__")) parts.push("q.b.");
-    out.push({ nome: it.nome, quantita: parts.join(" + "), fonti: [...it.fonti] });
+    out.push({ nome: it.nome, quantita: parts.join(" + "), reparto: it.reparto, fonti: [...it.fonti] });
   }
-  out.sort((a, b) => a.nome.localeCompare(b.nome, "it"));
+  const ord = (rep) => { const i = REPARTI.indexOf(rep); return i < 0 ? REPARTI.length : i; };
+  out.sort((a, b) => ord(a.reparto) - ord(b.reparto) || a.nome.localeCompare(b.nome, "it"));
   return out;
 }
 

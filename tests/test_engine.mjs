@@ -2,7 +2,7 @@
 // Niente dipendenze: asserzioni fatte a mano.
 import {
   proponi, ricetteRecenti, stagioneCorrente, norm, reduceStorico, normalizeRicetta,
-  listaSpesa, ymd,
+  listaSpesa, ymd, repartoDi, scalaQ, commensaliDi,
 } from "../docs/engine.js";
 
 let pass = 0, fail = 0;
@@ -106,6 +106,26 @@ ok(spesa.some((x) => x.nome === "tonno" && x.quantita === "160 g"), "tonno 160 g
 ok(!spesa.some((x) => norm(x.nome) === "sale"), "sale escluso (dispensa)");
 ok(!spesa.some((x) => x.nome === "pomodoro" && x.quantita !== "400 g"), "pomodoro 400 g (pasto passato non contato)");
 eq(ymd(new Date("2026-08-24T09:00:00")), "2026-08-24", "ymd locale");
+
+// --- reparti ---------------------------------------------------------------
+console.log("repartoDi()");
+eq(repartoDi("zucchine"), "Frutta e verdura", "verdura");
+eq(repartoDi("passata di pomodoro"), "Scatolame e conserve", "passata → conserve (non verdura)");
+eq(repartoDi("filetti di salmone"), "Pesce e frutti di mare", "pesce");
+eq(repartoDi("parmigiano"), "Latticini e uova", "latticini");
+eq(repartoDi("pangrattato"), "Pane e panetteria", "panetteria");
+eq(repartoDi("iperbolina"), "Altro", "sconosciuto → Altro");
+ok(spesa.every((x) => x.reparto), "ogni voce ha un reparto");
+
+// --- scalatura per commensali ----------------------------------------------
+console.log("scalatura commensali");
+eq(scalaQ(200, "g", 2), 400, "scala g x2");
+eq(scalaQ(1, "spicchio", 2), 2, "scala pezzi x2 (intero)");
+eq(commensaliDi({ presenti: ["a", "b"], ospiti: 2 }), 4, "commensali = presenti + ospiti");
+const PIANO2 = [{ uid: "z", data: "2026-08-26", pasto: "cena", ricettaId: "a", ospiti: 3 }];
+const spesa2 = listaSpesa({ piano: PIANO2, ricette: RIC_SPESA, dispensa: ["sale"], oggi: OGGI, porzioniBase: 3 });
+// commensali = 3(base, presenti non impostati) + 3 ospiti = 6 → fattore 2 → pasta 200*2
+eq(spesa2.find((x) => x.nome === "pasta").quantita, "400 g", "pasta scalata x2 con 3 ospiti");
 
 // --- esito -----------------------------------------------------------------
 console.log(`\n${pass} passati, ${fail} falliti`);

@@ -3,10 +3,11 @@
 import {
   proponi, reduceStorico, normalizeRicetta, toList, norm,
   PORTATE, PORTATA_NOME, listaSpesa, ymd,
+  PORZIONI_BASE, scalaIngredienti, commensaliDi, REPARTI,
 } from "./engine.js";
 import { Sync, load, save, mkUid, newDeviceId, mergeLog } from "./sync.js";
 
-const APP_VERSION = "v11";
+const APP_VERSION = "v12";
 
 // ---------------------------------------------------------------------------
 // Chiavi localStorage + stato
@@ -42,6 +43,7 @@ if (!DEVICE_ID) { DEVICE_ID = newDeviceId(); save(LS.device, DEVICE_ID); }
 const ui = Object.assign({
   screen: "home",
   presenti: Object.keys(PROFILI),
+  ospiti: 0,
   nrPasti: 3,
   portate: ["primo"],
   ingredienti: [],
@@ -58,7 +60,7 @@ const ui = Object.assign({
 ui.presenti = ui.presenti.filter((k) => PROFILI[k]);
 if (!ui.presenti.length) ui.presenti = Object.keys(PROFILI);
 
-function saveUI() { save(LS.ui, { presenti: ui.presenti, nrPasti: ui.nrPasti, portate: ui.portate, ingredienti: ui.ingredienti, obsTipo: ui.obsTipo }); }
+function saveUI() { save(LS.ui, { presenti: ui.presenti, ospiti: ui.ospiti, nrPasti: ui.nrPasti, portate: ui.portate, ingredienti: ui.ingredienti, obsTipo: ui.obsTipo }); }
 
 // ---------------------------------------------------------------------------
 // Sync famigliare
@@ -226,14 +228,19 @@ function renderPortate() {
   ).join("");
 }
 function renderNr() { $("#nrPasti").textContent = ui.nrPasti; }
+function renderOspiti() { const el = $("#ospiti"); if (el) el.textContent = ui.ospiti; }
+function commensaliUI() { return ui.presenti.length + (ui.ospiti || 0); }
 function renderIngChips() {
   $("#ingChips").innerHTML = ui.ingredienti.map((n, i) =>
     `<span class="chip rm" data-ing="${i}">${esc(n)} <span class="x">✕</span></span>`).join("");
 }
 
 function ricettaCardHTML(r, opts = {}) {
-  const ing = senzaDispensa(r.ingredienti);
+  const comm = opts.commensali;
+  const f = comm ? comm / (r.porzioni || PORZIONI_BASE) : 1;
+  const ing = senzaDispensa(f !== 1 ? scalaIngredienti(r.ingredienti, f) : r.ingredienti);
   const meta = [];
+  if (comm) meta.push(`👥 per ${comm}`);
   if (r.tempoMin) meta.push(`⏱️ ${r.tempoMin} min`);
   if (r.difficolta) meta.push(`🔥 ${esc(r.difficolta)}`);
   if (r.adattoBimbi) meta.push("🍼 adatto ai bimbi");
@@ -265,7 +272,7 @@ function ricettaCardHTML(r, opts = {}) {
 function renderProposte() {
   const box = $("#proposte");
   if (!ui.proposte.length) { box.innerHTML = ""; return; }
-  box.innerHTML = ui.proposte.map((r) => ricettaCardHTML(r, { actions: true, motivi: r._motivi })).join("");
+  box.innerHTML = ui.proposte.map((r) => ricettaCardHTML(r, { actions: true, motivi: r._motivi, commensali: commensaliUI() })).join("");
 }
 
 function doProponi(rimescola) {
@@ -408,11 +415,19 @@ function fmtLungo(s) { const d = parseYMD(s); return `${GIORNI[d.getDay()]} ${d.
 
 function pianoSlot(data, pasto) { return PIANO.find((x) => x.data === data && x.pasto === pasto); }
 function setPiano(data, pasto, ricettaId) {
+  const prev = pianoSlot(data, pasto);
+  const presenti = prev && Array.isArray(prev.presenti) ? prev.presenti : Object.keys(PROFILI);
+  const ospiti = prev && prev.ospiti != null ? prev.ospiti : 0;
   for (const e of PIANO.filter((x) => x.data === data && x.pasto === pasto)) if (e.id) deleteFromCloud("piano", e.id);
   PIANO = PIANO.filter((x) => !(x.data === data && x.pasto === pasto));
-  const e = { uid: mkUid(DEVICE_ID), data, pasto, ricettaId, byDevice: DEVICE_ID, ts: Date.now(), posted: false };
+  const e = { uid: mkUid(DEVICE_ID), data, pasto, ricettaId, presenti, ospiti, byDevice: DEVICE_ID, ts: Date.now(), posted: false };
   PIANO.push(e); save(LS.piano, PIANO);
   if (SYNC.on && sync.enabled) postLog("piano", e);
+}
+function updatePianoMeal(uid, patch) {
+  const e = PIANO.find((x) => x.uid === uid); if (!e) return;
+  Object.assign(e, patch); save(LS.piano, PIANO);
+  if (SYNC.on && sync.enabled && e.id) sync.patch("piano/" + e.id, patch);
 }
 function rimuoviPiano(uid) {
   const e = PIANO.find((x) => x.uid === uid);
@@ -422,7 +437,7 @@ function rimuoviPiano(uid) {
 function pianoFatto(uid) {
   const e = PIANO.find((x) => x.uid === uid); if (!e) return;
   const r = RICETTE.find((x) => x.id === e.ricettaId);
-  const ev = { uid: mkUid(DEVICE_ID), ricettaId: e.ricettaId, nome: r ? r.nome : "", data: e.data, pasto: e.pasto, presenti: (e.presenti || ui.presenti).slice(), byDevice: DEVICE_ID, ts: tsFor(e.data), posted: false };
+  const ev = { uid: mkUid(DEVICE_ID), ricettaId: e.ricettaId, nome: r ? r.nome : "", data: e.data, pasto: e.pasto, presenti: (e.presenti || ui.presenti).slice(), ospiti: e.ospiti || 0, byDevice: DEVICE_ID, ts: tsFor(e.data), posted: false };
   STORICO.push(ev); save(LS.storico, STORICO);
   if (SYNC.on && sync.enabled) postLog("storico", ev);
   rimuoviPiano(uid);
@@ -433,7 +448,8 @@ function slotHTML(data, pasto) {
   const lbl = pasto === "pranzo" ? "☀️ Pranzo" : "🌙 Cena";
   if (e) {
     const r = RICETTE.find((x) => x.id === e.ricettaId);
-    return `<button type="button" class="slot filled" data-voce="${esc(e.uid)}"><span class="slot-lbl">${lbl}</span><span class="slot-ric">${esc(r ? r.nome : "(rimossa)")}</span></button>`;
+    const osp = e.ospiti ? ` <span class="slot-osp">+${e.ospiti}👥</span>` : "";
+    return `<button type="button" class="slot filled" data-voce="${esc(e.uid)}"><span class="slot-lbl">${lbl}</span><span class="slot-ric">${esc(r ? r.nome : "(rimossa)")}${osp}</span></button>`;
   }
   return `<button type="button" class="slot empty" data-slot="${data}|${pasto}"><span class="slot-lbl">${lbl}</span><span class="slot-add">＋</span></button>`;
 }
@@ -527,19 +543,39 @@ function proponiPerSlot() {
   setPiano(modalCtx.data, modalCtx.pasto, r.id);
   closeModal(); renderPiano(); toast(`Pianificato: ${r.nome}`);
 }
-function apriPianoVoce(uid) {
-  const e = PIANO.find((x) => x.uid === uid); if (!e) return;
-  modalCtx = { kind: "voce", uid, data: e.data, pasto: e.pasto };
+function voceHTML(uid) {
+  const e = PIANO.find((x) => x.uid === uid); if (!e) return "";
   const r = RICETTE.find((x) => x.id === e.ricettaId);
-  openModal(`
+  const presSet = new Set(Array.isArray(e.presenti) ? e.presenti : Object.keys(PROFILI));
+  const chips = Object.entries(PROFILI).map(([k, p]) => `<button type="button" class="chip ${presSet.has(k) ? "on" : ""}" data-vp="${esc(k)}">${p.bimbo ? "🍼 " : ""}${esc(p.nome)}</button>`).join("");
+  const comm = commensaliDi({ presenti: [...presSet], ospiti: e.ospiti || 0 });
+  let ingHtml = "";
+  if (r) {
+    const nr = normalizeRicetta(r);
+    const f = comm / (nr.porzioni || PORZIONI_BASE);
+    const ing = senzaDispensa(scalaIngredienti(nr.ingredienti, f));
+    ingHtml = `<div class="sez-tit">Ingredienti (per ${comm})</div><ul class="ingredienti">${ing.map(fmtIngrediente).join("")}</ul>`;
+  }
+  return `
     <h2 class="q">${e.pasto === "pranzo" ? "☀️ Pranzo" : "🌙 Cena"} · ${esc(fmtLungo(e.data))}</h2>
     <p class="hint">🍽️ ${esc(r ? r.nome : "(ricetta rimossa)")}</p>
+    <label class="lbl">Chi c'è</label>
+    <div class="chips" id="vpChips">${chips}</div>
+    <div class="ospiti-row"><span class="ospiti-lbl">👥 + Ospiti</span>
+      <div class="stepper"><button type="button" class="step" data-vosp="-1">−</button><span class="step-val">${e.ospiti || 0}</span><button type="button" class="step" data-vosp="1">+</button></div>
+      <span class="hint" style="margin-left:auto">Commensali: <b>${comm}</b></span></div>
+    ${ingHtml}
     <div class="cta-row" style="flex-wrap:wrap">
       <button type="button" class="btn-ghost" data-voce-cambia>🔄 Cambia</button>
       <button type="button" class="btn-ghost" data-voce-fatto>✅ Fatto</button>
       <button type="button" class="btn-ghost danger" data-voce-rimuovi>🗑️ Rimuovi</button>
     </div>
-    <div class="cta-row"><button type="button" class="btn-ghost" data-modal-close>Chiudi</button></div>`);
+    <div class="cta-row"><button type="button" class="btn-ghost" data-modal-close>Chiudi</button></div>`;
+}
+function apriPianoVoce(uid) {
+  const e = PIANO.find((x) => x.uid === uid); if (!e) return;
+  modalCtx = { kind: "voce", uid, data: e.data, pasto: e.pasto };
+  openModal(voceHTML(uid));
 }
 function apriGiorno(data) {
   modalCtx = { kind: "giorno", data };
@@ -556,9 +592,13 @@ function spesaHTML() {
   const items = listaSpesa({ piano: PIANO, ricette: RICETTE, dispensa: DISPENSA, oggi: new Date() });
   if (!items.length) return `<h2 class="q">🛒 Lista della spesa</h2><div class="empty">Nessun pasto pianificato da oggi in poi.<br>Aggiungi pasti nel Piano.</div><div class="cta-row"><button type="button" class="btn-ghost" data-modal-close>Chiudi</button></div>`;
   const checked = new Set(load(LS.spesaCheck, []));
-  const rows = items.map((it) => { const k = norm(it.nome); const on = checked.has(k); return `
-    <label class="spesa-row${on ? " done" : ""}"><input type="checkbox" data-spesacheck="${esc(k)}" ${on ? "checked" : ""}/>
-    <span class="sp-nome">${esc(it.nome)}</span><span class="sp-q">${esc(it.quantita)}</span></label>`; }).join("");
+  let cur = null;
+  const rows = items.map((it) => {
+    let head = "";
+    if (it.reparto !== cur) { cur = it.reparto; head = `<div class="reparto-h">${esc(cur)}</div>`; }
+    const k = norm(it.nome); const on = checked.has(k);
+    return head + `<label class="spesa-row${on ? " done" : ""}"><input type="checkbox" data-spesacheck="${esc(k)}" ${on ? "checked" : ""}/><span class="sp-nome">${esc(it.nome)}</span><span class="sp-q">${esc(it.quantita)}</span></label>`;
+  }).join("");
   return `
     <h2 class="q">🛒 Lista della spesa <small>(${items.length})</small></h2>
     <p class="hint">Da tutti i pasti pianificati da oggi in poi. Dispensa esclusa.</p>
@@ -594,7 +634,7 @@ function renderImpostazioni() {
 // Render orchestration
 // ---------------------------------------------------------------------------
 function renderAll() {
-  renderPresenti(); renderPortate(); renderNr(); renderIngChips();
+  renderPresenti(); renderPortate(); renderNr(); renderOspiti(); renderIngChips();
   renderRicettario(); renderCoda(); renderStorico(); renderInsegnaForm(); renderImpostazioni(); renderPiano();
 }
 // come renderAll ma non ridisegna se l'utente sta scrivendo in un campo (non ruba il focus)
@@ -632,6 +672,8 @@ function pastoFormHTML(o) {
     </div>
     <label class="lbl">Chi l'ha mangiata</label>
     <div class="chips" id="mpPresenti">${presChips}</div>
+    <div class="ospiti-row"><span class="ospiti-lbl">👥 + Ospiti</span>
+      <div class="stepper"><button type="button" class="step" data-mposp="-1">−</button><span class="step-val" id="mpOspVal">${o.ospiti || 0}</span><button type="button" class="step" data-mposp="1">+</button></div></div>
     <div class="cta-row">
       <button type="button" class="btn-ghost" data-modal-close>Annulla</button>
       <button type="button" class="btn-primary" id="mpSalva">Salva</button>
@@ -640,14 +682,14 @@ function pastoFormHTML(o) {
 function apriRegistraPasto(ricettaId) {
   const r = RICETTE.find((x) => x.id === ricettaId);
   const now = new Date();
-  modalCtx = { kind: "pasto", mode: "new", ricettaId };
-  openModal(pastoFormHTML({ titolo: "L'abbiamo fatto!", ricettaNome: r ? r.nome : "", data: todayISO(), pasto: now.getHours() < 16 ? "pranzo" : "cena", presenti: ui.presenti.slice() }));
+  modalCtx = { kind: "pasto", mode: "new", ricettaId, ospiti: ui.ospiti || 0 };
+  openModal(pastoFormHTML({ titolo: "L'abbiamo fatto!", ricettaNome: r ? r.nome : "", data: todayISO(), pasto: now.getHours() < 16 ? "pranzo" : "cena", presenti: ui.presenti.slice(), ospiti: modalCtx.ospiti }));
 }
 function apriModificaPasto(uid) {
   const e = STORICO.find((x) => x.uid === uid);
   if (!e) return;
-  modalCtx = { kind: "pasto", mode: "edit", uid };
-  openModal(pastoFormHTML({ titolo: "Modifica pasto", ricettaNome: nomeRicetta(e.ricettaId), data: e.data || todayISO(), pasto: e.pasto || "pranzo", presenti: (e.presenti || []).slice() }));
+  modalCtx = { kind: "pasto", mode: "edit", uid, ospiti: e.ospiti || 0 };
+  openModal(pastoFormHTML({ titolo: "Modifica pasto", ricettaNome: nomeRicetta(e.ricettaId), data: e.data || todayISO(), pasto: e.pasto || "pranzo", presenti: (e.presenti || []).slice(), ospiti: modalCtx.ospiti }));
 }
 function salvaPasto() {
   const data = $("#mpData").value || todayISO();
@@ -656,7 +698,7 @@ function salvaPasto() {
   const tsFor = (d) => { const t = new Date(d + "T12:00:00").getTime(); return isNaN(t) ? Date.now() : t; };
   if (modalCtx.mode === "new") {
     const r = RICETTE.find((x) => x.id === modalCtx.ricettaId);
-    const e = { uid: mkUid(DEVICE_ID), ricettaId: modalCtx.ricettaId, nome: r ? r.nome : "", data, pasto, presenti, byDevice: DEVICE_ID, ts: tsFor(data), posted: false };
+    const e = { uid: mkUid(DEVICE_ID), ricettaId: modalCtx.ricettaId, nome: r ? r.nome : "", data, pasto, presenti, ospiti: modalCtx.ospiti || 0, byDevice: DEVICE_ID, ts: tsFor(data), posted: false };
     STORICO.push(e); save(LS.storico, STORICO);
     if (SYNC.on && sync.enabled) postLog("storico", e);
     ui.proposte = ui.proposte.filter((p) => p.id !== modalCtx.ricettaId);
@@ -664,9 +706,9 @@ function salvaPasto() {
   } else {
     const e = STORICO.find((x) => x.uid === modalCtx.uid);
     if (e) {
-      e.data = data; e.pasto = pasto; e.presenti = presenti; e.ts = tsFor(data);
+      e.data = data; e.pasto = pasto; e.presenti = presenti; e.ospiti = modalCtx.ospiti || 0; e.ts = tsFor(data);
       save(LS.storico, STORICO);
-      if (SYNC.on && sync.enabled && e.id) sync.patch("storico/" + e.id, { data, pasto, presenti, ts: e.ts });
+      if (SYNC.on && sync.enabled && e.id) sync.patch("storico/" + e.id, { data, pasto, presenti, ospiti: e.ospiti, ts: e.ts });
     }
     toast("Pasto aggiornato ✓");
   }
@@ -835,6 +877,8 @@ function wire() {
   });
   $("#nrMeno").addEventListener("click", () => { ui.nrPasti = Math.max(1, ui.nrPasti - 1); saveUI(); renderNr(); });
   $("#nrPiu").addEventListener("click", () => { ui.nrPasti = Math.min(12, ui.nrPasti + 1); saveUI(); renderNr(); });
+  $("#ospMeno").addEventListener("click", () => { ui.ospiti = Math.max(0, ui.ospiti - 1); saveUI(); renderOspiti(); renderProposte(); });
+  $("#ospPiu").addEventListener("click", () => { ui.ospiti = Math.min(20, ui.ospiti + 1); saveUI(); renderOspiti(); renderProposte(); });
   const addIng = () => { const v = $("#ingInput").value.trim(); if (!v) return; ui.ingredienti.push(v); $("#ingInput").value = ""; saveUI(); renderIngChips(); };
   $("#ingAdd").addEventListener("click", addIng);
   $("#ingInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addIng(); } });
@@ -950,6 +994,7 @@ function wire() {
     const pasto = e.target.closest("[data-pasto]");
     if (pasto) { $$("#mpPasto .chip").forEach((c) => c.classList.remove("on")); pasto.classList.add("on"); return; }
     const mp = e.target.closest("[data-mp]"); if (mp) { mp.classList.toggle("on"); return; }
+    const mposp = e.target.closest("[data-mposp]"); if (mposp) { modalCtx.ospiti = Math.max(0, (modalCtx.ospiti || 0) + Number(mposp.dataset.mposp)); const el = $("#mpOspVal"); if (el) el.textContent = modalCtx.ospiti; return; }
     if (e.target.closest("#mpSalva")) { salvaPasto(); return; }
     // form RICETTA
     if (e.target.closest("[data-adding]")) { syncDraftFromDOM(); modalCtx.draft.ingredienti.push({ nome: "", q: null, unita: "", opzionale: false }); openModal(ricettaFormHTML(modalCtx.draft)); return; }
@@ -962,11 +1007,16 @@ function wire() {
     const voce = e.target.closest("[data-voce]"); if (voce) { apriPianoVoce(voce.dataset.voce); return; }
     const pick = e.target.closest("[data-pickric]"); if (pick) { setPiano(modalCtx.data, modalCtx.pasto, pick.dataset.pickric); closeModal(); renderPiano(); toast("Pianificato ✓"); return; }
     if (e.target.closest("[data-proponi-slot]")) { proponiPerSlot(); return; }
+    const vp = e.target.closest("[data-vp]"); if (vp) { const en = PIANO.find((x) => x.uid === modalCtx.uid); if (en) { const set = new Set(Array.isArray(en.presenti) ? en.presenti : Object.keys(PROFILI)); const k = vp.dataset.vp; set.has(k) ? set.delete(k) : set.add(k); updatePianoMeal(modalCtx.uid, { presenti: [...set] }); openModal(voceHTML(modalCtx.uid)); renderPiano(); } return; }
+    const vo = e.target.closest("[data-vosp]"); if (vo) { const en = PIANO.find((x) => x.uid === modalCtx.uid); if (en) { updatePianoMeal(modalCtx.uid, { ospiti: Math.max(0, (en.ospiti || 0) + Number(vo.dataset.vosp)) }); openModal(voceHTML(modalCtx.uid)); renderPiano(); } return; }
     if (e.target.closest("[data-voce-cambia]")) { apriSlotPicker(modalCtx.data, modalCtx.pasto); return; }
     if (e.target.closest("[data-voce-fatto]")) { pianoFatto(modalCtx.uid); closeModal(); renderPiano(); renderStorico(); toast("Segnato come fatto ✓"); return; }
     if (e.target.closest("[data-voce-rimuovi]")) { rimuoviPiano(modalCtx.uid); closeModal(); renderPiano(); return; }
     if (e.target.closest("[data-spesa-copia]")) {
-      const txt = listaSpesa({ piano: PIANO, ricette: RICETTE, dispensa: DISPENSA, oggi: new Date() }).map((i) => `- ${i.nome}: ${i.quantita}`).join("\n");
+      const its = listaSpesa({ piano: PIANO, ricette: RICETTE, dispensa: DISPENSA, oggi: new Date(), porzioniBase: PORZIONI_BASE });
+      let cur = null; const lines = [];
+      for (const i of its) { if (i.reparto !== cur) { cur = i.reparto; lines.push(`\n${cur.toUpperCase()}`); } lines.push(`- ${i.nome}: ${i.quantita}`); }
+      const txt = lines.join("\n").trim();
       (async () => { try { await navigator.clipboard.writeText(txt); toast("Lista copiata 📋"); } catch { toast("Copia non riuscita"); } })(); return;
     }
     if (e.target.closest("[data-spesa-reset]")) { save(LS.spesaCheck, []); openModal(spesaHTML()); return; }

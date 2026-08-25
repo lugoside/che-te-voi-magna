@@ -233,6 +233,10 @@ ol.passaggi li { margin: 5px 0; font-size: 14px; }
 .spesa-row .sp-nome { flex: 1; font-weight: 600; text-transform: capitalize; }
 .spesa-row .sp-q { color: var(--ink-soft); font-size: 13px; }
 .spesa-row.done .sp-nome, .spesa-row.done .sp-q { text-decoration: line-through; opacity: .5; }
+.reparto-h { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--primary-dark); margin: 14px 0 4px; }
+.ospiti-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.ospiti-lbl { font-weight: 700; font-size: 14px; }
+.slot-osp { color: var(--accent); font-weight: 700; font-size: 12px; }
 
 /* ---------- toast ---------- */
 .toast {
