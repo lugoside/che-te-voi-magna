@@ -64,6 +64,14 @@ export function norm(s) {
   return out.replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+// data locale in formato YYYY-MM-DD (niente UTC: conta il giorno "di casa")
+export function ymd(d = new Date()) {
+  const x = new Date(d);
+  const m = String(x.getMonth() + 1).padStart(2, "0");
+  const g = String(x.getDate()).padStart(2, "0");
+  return `${x.getFullYear()}-${m}-${g}`;
+}
+
 // stagione corrente (emisfero nord) da una data → "inverno|primavera|estate|autunno"
 export function stagioneCorrente(date = new Date()) {
   const m = date.getMonth() + 1; // 1..12
@@ -249,6 +257,50 @@ export function proponi(opts = {}) {
   }
 
   return { proposte, candidati: scored.length, scartate, stagione };
+}
+
+// ---------------------------------------------------------------------------
+// listaSpesa() — aggrega gli ingredienti dei pasti PIANIFICATI (da oggi in poi).
+// Esclude la dispensa (staple sempre in casa). Somma le quantità per ingrediente,
+// raggruppando per unità di misura; se manca la quantità → "q.b.".
+//
+// opts = { piano, ricette, dispensa, oggi }
+// Ritorna [{ nome, quantita, fonti:[nomiRicetta] }] ordinato per nome.
+// ---------------------------------------------------------------------------
+export function listaSpesa(opts = {}) {
+  const oggiStr = ymd(opts.oggi ? new Date(opts.oggi) : new Date());
+  const dispSet = (opts.dispensa || []).map(norm).filter(Boolean);
+  const byId = new Map(toList(opts.ricette).map((r) => [r.id, normalizeRicetta(r)]));
+  const piano = toList(opts.piano);
+  const items = new Map(); // norm(nome) -> { nome, units: Map(unita->somma|null), fonti:Set }
+
+  for (const p of piano) {
+    if (!p || !p.data || p.data < oggiStr) continue; // solo oggi/futuro
+    const r = byId.get(p.ricettaId);
+    if (!r) continue;
+    for (const ing of r.ingredienti) {
+      const n = norm(ing.nome);
+      if (!n) continue;
+      if (dispSet.some((d) => n === d || n.includes(d))) continue; // salta dispensa
+      if (!items.has(n)) items.set(n, { nome: ing.nome, units: new Map(), fonti: new Set() });
+      const it = items.get(n);
+      it.fonti.add(r.nome);
+      const u = (ing.unita || "").trim();
+      const q = typeof ing.q === "number" ? ing.q : null;
+      if (q == null) it.units.set("__qb__", null);
+      else it.units.set(u, (it.units.get(u) || 0) + q);
+    }
+  }
+
+  const out = [];
+  for (const it of items.values()) {
+    const parts = [];
+    for (const [u, q] of it.units) { if (u === "__qb__") continue; parts.push(`${+q.toFixed(2)}${u ? " " + u : ""}`); }
+    if (it.units.has("__qb__")) parts.push("q.b.");
+    out.push({ nome: it.nome, quantita: parts.join(" + "), fonti: [...it.fonti] });
+  }
+  out.sort((a, b) => a.nome.localeCompare(b.nome, "it"));
+  return out;
 }
 
 // ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@
 // Niente dipendenze: asserzioni fatte a mano.
 import {
   proponi, ricetteRecenti, stagioneCorrente, norm, reduceStorico, normalizeRicetta,
+  listaSpesa, ymd,
 } from "../docs/engine.js";
 
 let pass = 0, fail = 0;
@@ -86,6 +87,25 @@ console.log("normalizeRicetta()");
 const nr = normalizeRicetta({ id: "z", nome: "X", portata: "boh", ingredienti: ["pane", { nome: "burro", q: 20, unita: "g" }] });
 eq(nr.portata, "secondo", "portata sconosciuta → default secondo");
 eq(nr.ingredienti[0], { nome: "pane", q: null, unita: "", opzionale: false }, "ingrediente stringa normalizzato");
+
+// --- listaSpesa ------------------------------------------------------------
+console.log("listaSpesa()");
+const RIC_SPESA = [
+  { id: "a", nome: "Pasta al pomodoro", portata: "primo", ingredienti: [{ nome: "pasta", q: 200, unita: "g" }, { nome: "pomodoro", q: 400, unita: "g" }, { nome: "sale" }] },
+  { id: "b", nome: "Pasta al tonno", portata: "primo", ingredienti: [{ nome: "pasta", q: 100, unita: "g" }, { nome: "tonno", q: 160, unita: "g" }] },
+];
+const PIANO = [
+  { uid: "p1", data: "2026-08-26", pasto: "cena", ricettaId: "a" },
+  { uid: "p2", data: "2026-08-27", pasto: "cena", ricettaId: "b" },
+  { uid: "p3", data: "2026-08-20", pasto: "cena", ricettaId: "a" }, // passato → escluso
+];
+const spesa = listaSpesa({ piano: PIANO, ricette: RIC_SPESA, dispensa: ["sale", "olio"], oggi: OGGI });
+const pasta = spesa.find((x) => x.nome === "pasta");
+eq(pasta && pasta.quantita, "300 g", "pasta sommata (200+100) dai soli pasti futuri");
+ok(spesa.some((x) => x.nome === "tonno" && x.quantita === "160 g"), "tonno 160 g");
+ok(!spesa.some((x) => norm(x.nome) === "sale"), "sale escluso (dispensa)");
+ok(!spesa.some((x) => x.nome === "pomodoro" && x.quantita !== "400 g"), "pomodoro 400 g (pasto passato non contato)");
+eq(ymd(new Date("2026-08-24T09:00:00")), "2026-08-24", "ymd locale");
 
 // --- esito -----------------------------------------------------------------
 console.log(`\n${pass} passati, ${fail} falliti`);

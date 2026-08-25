@@ -2,11 +2,11 @@
 // Collega il motore di selezione (engine.js), la sync famigliare (sync.js) e il DOM.
 import {
   proponi, reduceStorico, normalizeRicetta, toList, norm,
-  PORTATE, PORTATA_NOME,
+  PORTATE, PORTATA_NOME, listaSpesa, ymd,
 } from "./engine.js";
 import { Sync, load, save, mkUid, newDeviceId, mergeLog } from "./sync.js";
 
-const APP_VERSION = "v10";
+const APP_VERSION = "v11";
 
 // ---------------------------------------------------------------------------
 // Chiavi localStorage + stato
@@ -15,6 +15,7 @@ const LS = {
   config: "ctvm_config", sync: "ctvm_sync", device: "ctvm_device", ui: "ctvm_ui",
   profili: "ctvm_profili", dispensa: "ctvm_dispensa", regole: "ctvm_regole",
   ricette: "ctvm_ricette", storico: "ctvm_storico", coda: "ctvm_coda",
+  piano: "ctvm_piano", spesaCheck: "ctvm_spesa_check",
 };
 
 const defaultProfili = () => ({
@@ -32,6 +33,7 @@ let REGOLE = load(LS.regole, []);
 let RICETTE = load(LS.ricette, []);          // mirror del ricettario (array)
 let STORICO = load(LS.storico, []);          // log append-only
 let CODA = load(LS.coda, []);                // log append-only
+let PIANO = load(LS.piano, []);              // pasti pianificati (log, 1 per slot data+pasto)
 let SYNC = load(LS.sync, { url: "", code: "", on: false });
 
 let DEVICE_ID = load(LS.device, "");
@@ -48,6 +50,9 @@ const ui = Object.assign({
   filtroPortata: "tutte",
   obsTipo: "nuova-ricetta",
   proposte: [],
+  pianoView: "agenda",       // agenda | settimana | mese
+  pianoCursor: ymd(),        // data di riferimento per settimana/mese
+  agendaDays: 14,            // quanti giorni mostra l'agenda
 }, load(LS.ui, {}));
 // i profili possono essere cambiati: tieni i presenti coerenti
 ui.presenti = ui.presenti.filter((k) => PROFILI[k]);
@@ -79,6 +84,7 @@ async function reconcile() {
     ]);
     const rsN = await getNode("storico");
     const rqN = await getNode("coda");
+    const rpN = await getNode("piano");
     let changed = false;
     const differ = (a, b) => JSON.stringify(a) !== JSON.stringify(b);
     const sortById = (l) => [...l].sort((a, b) => (String(a.id) < String(b.id) ? -1 : 1));
@@ -100,20 +106,26 @@ async function reconcile() {
     const mq = mergeLog(CODA, rqN.data); if (mq.changed) { CODA = mq.log; changed = true; }
     if (rqN.ok) { const ids = new Set(Object.keys(rqN.data || {})); const n = CODA.length; CODA = CODA.filter((e) => !e.id || ids.has(e.id)); if (CODA.length !== n) changed = true; }
     save(LS.coda, CODA);
+    const mp = mergeLog(PIANO, rpN.data); if (mp.changed) { PIANO = mp.log; changed = true; }
+    if (rpN.ok) { const ids = new Set(Object.keys(rpN.data || {})); const n = PIANO.length; PIANO = PIANO.filter((e) => !e.id || ids.has(e.id)); if (PIANO.length !== n) changed = true; }
+    save(LS.piano, PIANO);
     await flushPending();
     if (changed) renderAllSafe();
   } catch {}
 }
 
+const LOG_LS = { storico: LS.storico, coda: LS.coda, piano: LS.piano };
+const LOG_ARR = () => ({ storico: STORICO, coda: CODA, piano: PIANO });
 async function flushPending() {
   if (!SYNC.on || !sync.enabled) return;
-  for (const e of STORICO.filter((x) => x.posted === false && x.byDevice === DEVICE_ID)) await postLog("storico", e);
-  for (const e of CODA.filter((x) => x.posted === false && x.byDevice === DEVICE_ID)) await postLog("coda", e);
+  for (const path of ["storico", "coda", "piano"]) {
+    for (const e of LOG_ARR()[path].filter((x) => x.posted === false && x.byDevice === DEVICE_ID)) await postLog(path, e);
+  }
 }
 async function postLog(path, e) {
   const { id, posted, ...body } = e;
   const pushId = await sync.append(path, body);
-  if (pushId) { e.posted = true; e.id = pushId; save(path === "storico" ? LS.storico : LS.coda, path === "storico" ? STORICO : CODA); }
+  if (pushId) { e.posted = true; e.id = pushId; save(LOG_LS[path], LOG_ARR()[path]); }
 }
 
 function subscribeAll() {
@@ -130,6 +142,11 @@ function subscribeAll() {
     let obj = null;
     if (msg.path === "/") obj = msg.data; else if (msg.path && msg.data && msg.data.uid) obj = { [msg.path.replace(/^\//, "")]: msg.data };
     const m = mergeLog(CODA, obj); if (m.changed) { CODA = m.log; save(LS.coda, CODA); renderIfVisible(["insegna"]); }
+  });
+  sync.subscribe("piano", (msg) => {
+    let obj = null;
+    if (msg.path === "/") obj = msg.data; else if (msg.path && msg.data && msg.data.uid) obj = { [msg.path.replace(/^\//, "")]: msg.data };
+    const m = mergeLog(PIANO, obj); if (m.changed) { PIANO = m.log; save(LS.piano, PIANO); renderIfVisible(["piano", "home"]); }
   });
   sync.subscribe("ricette", (msg) => {
     if (msg.path === "/") { RICETTE = toList(msg.data); }
@@ -375,6 +392,184 @@ function renderDispensa() {
   $("#dispChips").innerHTML = DISPENSA.map((d, i) =>
     `<span class="chip rm" data-disp="${i}">${esc(d)} <span class="x">✕</span></span>`).join("");
 }
+// ===========================================================================
+// PIANO settimanale (agenda / settimana / mese) + lista della spesa
+// ===========================================================================
+const tsFor = (d) => { const t = new Date(d + "T12:00:00").getTime(); return isNaN(t) ? Date.now() : t; };
+const GIORNI = ["dom", "lun", "mar", "mer", "gio", "ven", "sab"];
+const GIORNI_LUN = ["lun", "mar", "mer", "gio", "ven", "sab", "dom"];
+const MESI = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"];
+function parseYMD(s) { const [y, m, d] = String(s).split("-").map(Number); return new Date(y, (m || 1) - 1, d || 1, 12, 0, 0); }
+function addDaysISO(s, n) { const d = parseYMD(s); d.setDate(d.getDate() + n); return ymd(d); }
+function addMonthsISO(s, n) { const d = parseYMD(s); d.setMonth(d.getMonth() + n); return ymd(d); }
+function startWeekISO(s) { const d = parseYMD(s); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow); return ymd(d); }
+function fmtBreve(s) { const d = parseYMD(s); return `${GIORNI[d.getDay()]} ${d.getDate()} ${MESI[d.getMonth()].slice(0, 3)}`; }
+function fmtLungo(s) { const d = parseYMD(s); return `${GIORNI[d.getDay()]} ${d.getDate()} ${MESI[d.getMonth()]}`; }
+
+function pianoSlot(data, pasto) { return PIANO.find((x) => x.data === data && x.pasto === pasto); }
+function setPiano(data, pasto, ricettaId) {
+  for (const e of PIANO.filter((x) => x.data === data && x.pasto === pasto)) if (e.id) deleteFromCloud("piano", e.id);
+  PIANO = PIANO.filter((x) => !(x.data === data && x.pasto === pasto));
+  const e = { uid: mkUid(DEVICE_ID), data, pasto, ricettaId, byDevice: DEVICE_ID, ts: Date.now(), posted: false };
+  PIANO.push(e); save(LS.piano, PIANO);
+  if (SYNC.on && sync.enabled) postLog("piano", e);
+}
+function rimuoviPiano(uid) {
+  const e = PIANO.find((x) => x.uid === uid);
+  PIANO = PIANO.filter((x) => x.uid !== uid); save(LS.piano, PIANO);
+  if (e && e.id) deleteFromCloud("piano", e.id);
+}
+function pianoFatto(uid) {
+  const e = PIANO.find((x) => x.uid === uid); if (!e) return;
+  const r = RICETTE.find((x) => x.id === e.ricettaId);
+  const ev = { uid: mkUid(DEVICE_ID), ricettaId: e.ricettaId, nome: r ? r.nome : "", data: e.data, pasto: e.pasto, presenti: (e.presenti || ui.presenti).slice(), byDevice: DEVICE_ID, ts: tsFor(e.data), posted: false };
+  STORICO.push(ev); save(LS.storico, STORICO);
+  if (SYNC.on && sync.enabled) postLog("storico", ev);
+  rimuoviPiano(uid);
+}
+
+function slotHTML(data, pasto) {
+  const e = pianoSlot(data, pasto);
+  const lbl = pasto === "pranzo" ? "☀️ Pranzo" : "🌙 Cena";
+  if (e) {
+    const r = RICETTE.find((x) => x.id === e.ricettaId);
+    return `<button type="button" class="slot filled" data-voce="${esc(e.uid)}"><span class="slot-lbl">${lbl}</span><span class="slot-ric">${esc(r ? r.nome : "(rimossa)")}</span></button>`;
+  }
+  return `<button type="button" class="slot empty" data-slot="${data}|${pasto}"><span class="slot-lbl">${lbl}</span><span class="slot-add">＋</span></button>`;
+}
+function dayCardHTML(d) {
+  const oggi = d === ymd();
+  return `<div class="giorno-card${oggi ? " oggi" : ""}">
+    <div class="giorno-h">${oggi ? "Oggi · " : ""}${esc(fmtLungo(d))}</div>
+    <div class="slot-wrap">${slotHTML(d, "pranzo")}${slotHTML(d, "cena")}</div>
+  </div>`;
+}
+function renderAgenda() {
+  const start = ymd();
+  let html = "";
+  for (let i = 0; i < ui.agendaDays; i++) html += dayCardHTML(addDaysISO(start, i));
+  return html + `<button type="button" class="btn-ghost small" data-agendamore style="margin-top:6px">＋ altri 7 giorni</button>`;
+}
+function renderSettimana() {
+  const s = startWeekISO(ui.pianoCursor);
+  let html = "";
+  for (let i = 0; i < 7; i++) html += dayCardHTML(addDaysISO(s, i));
+  return html;
+}
+function renderMese() {
+  const cur = parseYMD(ui.pianoCursor);
+  const y = cur.getFullYear(), m = cur.getMonth();
+  const first = new Date(y, m, 1, 12);
+  const startDow = (first.getDay() + 6) % 7;
+  const gridStart = new Date(y, m, 1 - startDow, 12);
+  const oggi = ymd();
+  let cells = "";
+  for (let i = 0; i < 42; i++) {
+    const dd = new Date(gridStart); dd.setDate(gridStart.getDate() + i);
+    const s = ymd(dd), inM = dd.getMonth() === m;
+    const cnt = new Set(PIANO.filter((x) => x.data === s).map((x) => x.pasto)).size;
+    cells += `<button type="button" class="mcell${inM ? "" : " off"}${s === oggi ? " today" : ""}" data-day="${s}"><span class="mnum">${dd.getDate()}</span>${cnt ? `<span class="mdot">${cnt >= 2 ? "●●" : "●"}</span>` : ""}</button>`;
+  }
+  return `<div class="mgrid">${GIORNI_LUN.map((g) => `<div class="mhead">${g}</div>`).join("")}${cells}</div>`;
+}
+function renderPiano() {
+  const box = $("#pianoBox"); if (!box) return;
+  const view = ui.pianoView;
+  let label = "", nav = "";
+  if (view === "agenda") { label = "Prossimi giorni"; }
+  else if (view === "settimana") { const s = startWeekISO(ui.pianoCursor); label = `${fmtBreve(s)} – ${fmtBreve(addDaysISO(s, 6))}`; nav = `<button type="button" class="icon-btn" data-pianonav="prev">‹</button><button type="button" class="icon-btn" data-pianonav="next">›</button>`; }
+  else { label = `${MESI[parseYMD(ui.pianoCursor).getMonth()]} ${parseYMD(ui.pianoCursor).getFullYear()}`; nav = `<button type="button" class="icon-btn" data-pianonav="prev">‹</button><button type="button" class="icon-btn" data-pianonav="next">›</button>`; }
+  const seg = [["agenda", "Agenda"], ["settimana", "Settimana"], ["mese", "Mese"]].map(([v, t]) => `<button type="button" class="segbtn${view === v ? " on" : ""}" data-pianoview="${v}">${t}</button>`).join("");
+  const body = view === "agenda" ? renderAgenda() : view === "settimana" ? renderSettimana() : renderMese();
+  box.innerHTML = `
+    <div class="segmented">${seg}</div>
+    <div class="piano-nav">
+      <button type="button" class="btn-ghost small" data-pianotoday>Oggi</button>
+      <span class="piano-label">${esc(label)}</span>
+      <span class="piano-arrows">${nav}</span>
+    </div>
+    <div class="piano-body ${view}">${body}</div>
+    <button type="button" class="btn-primary" data-spesa style="margin-top:14px">🛒 Lista della spesa</button>`;
+}
+
+// --- modali del piano ---
+function apriSlotPicker(data, pasto) {
+  modalCtx = { kind: "slot", data, pasto, q: "" };
+  openModal(slotPickerHTML());
+}
+function slotListHTML() {
+  const nq = norm(modalCtx.q || "");
+  let list = RICETTE.map(normalizeRicetta);
+  if (nq) list = list.filter((r) => norm(r.nome).includes(nq) || r.ingredienti.some((i) => norm(i.nome).includes(nq)));
+  list.sort((a, b) => a.nome.localeCompare(b.nome, "it"));
+  if (!list.length) return `<div class="empty">Nessuna ricetta</div>`;
+  return list.slice(0, 250).map((r) => `
+    <button type="button" class="riga" data-pickric="${esc(r.id)}">
+      <div class="r-main"><div class="r-title">${esc(r.nome)}</div>
+      <div class="r-sub">${esc(PORTATA_NOME[r.portata] || r.portata)}${r.tempoMin ? " · " + r.tempoMin + " min" : ""}${r.adattoBimbi ? " · 🍼" : ""}</div></div>
+    </button>`).join("");
+}
+function slotPickerHTML() {
+  return `
+    <h2 class="q">${modalCtx.pasto === "pranzo" ? "☀️ Pranzo" : "🌙 Cena"} · ${esc(fmtLungo(modalCtx.data))}</h2>
+    <div class="ing-input">
+      <input id="slotSearch" type="search" placeholder="Cerca una ricetta…" value="${esc(modalCtx.q || "")}" />
+      <button type="button" class="btn-mini" data-proponi-slot title="Proponi un'idea">🎲</button>
+    </div>
+    <div id="slotList" class="lista" style="margin-top:10px;max-height:52vh;overflow:auto">${slotListHTML()}</div>
+    <div class="cta-row"><button type="button" class="btn-ghost" data-modal-close>Chiudi</button></div>`;
+}
+function proponiPerSlot() {
+  const pianoEv = PIANO.map((p) => ({ ricettaId: p.ricettaId, data: p.data }));
+  const res = proponi({ ricette: RICETTE, storico: STORICO.concat(pianoEv), profili: PROFILI, presenti: ui.presenti, nrPasti: 1, portate: [], oggi: modalCtx.data, seed: Math.floor(Math.random() * 100000) });
+  if (!res.proposte.length) { toast("Nessuna idea adatta 🤔"); return; }
+  const r = res.proposte[0];
+  setPiano(modalCtx.data, modalCtx.pasto, r.id);
+  closeModal(); renderPiano(); toast(`Pianificato: ${r.nome}`);
+}
+function apriPianoVoce(uid) {
+  const e = PIANO.find((x) => x.uid === uid); if (!e) return;
+  modalCtx = { kind: "voce", uid, data: e.data, pasto: e.pasto };
+  const r = RICETTE.find((x) => x.id === e.ricettaId);
+  openModal(`
+    <h2 class="q">${e.pasto === "pranzo" ? "☀️ Pranzo" : "🌙 Cena"} · ${esc(fmtLungo(e.data))}</h2>
+    <p class="hint">🍽️ ${esc(r ? r.nome : "(ricetta rimossa)")}</p>
+    <div class="cta-row" style="flex-wrap:wrap">
+      <button type="button" class="btn-ghost" data-voce-cambia>🔄 Cambia</button>
+      <button type="button" class="btn-ghost" data-voce-fatto>✅ Fatto</button>
+      <button type="button" class="btn-ghost danger" data-voce-rimuovi>🗑️ Rimuovi</button>
+    </div>
+    <div class="cta-row"><button type="button" class="btn-ghost" data-modal-close>Chiudi</button></div>`);
+}
+function apriGiorno(data) {
+  modalCtx = { kind: "giorno", data };
+  openModal(`
+    <h2 class="q">${esc(fmtLungo(data))}</h2>
+    <div class="slot-wrap">${slotHTML(data, "pranzo")}${slotHTML(data, "cena")}</div>
+    <div class="cta-row"><button type="button" class="btn-ghost" data-modal-close>Chiudi</button></div>`);
+}
+function apriSpesa() {
+  modalCtx = { kind: "spesa" };
+  openModal(spesaHTML());
+}
+function spesaHTML() {
+  const items = listaSpesa({ piano: PIANO, ricette: RICETTE, dispensa: DISPENSA, oggi: new Date() });
+  if (!items.length) return `<h2 class="q">🛒 Lista della spesa</h2><div class="empty">Nessun pasto pianificato da oggi in poi.<br>Aggiungi pasti nel Piano.</div><div class="cta-row"><button type="button" class="btn-ghost" data-modal-close>Chiudi</button></div>`;
+  const checked = new Set(load(LS.spesaCheck, []));
+  const rows = items.map((it) => { const k = norm(it.nome); const on = checked.has(k); return `
+    <label class="spesa-row${on ? " done" : ""}"><input type="checkbox" data-spesacheck="${esc(k)}" ${on ? "checked" : ""}/>
+    <span class="sp-nome">${esc(it.nome)}</span><span class="sp-q">${esc(it.quantita)}</span></label>`; }).join("");
+  return `
+    <h2 class="q">🛒 Lista della spesa <small>(${items.length})</small></h2>
+    <p class="hint">Da tutti i pasti pianificati da oggi in poi. Dispensa esclusa.</p>
+    <div class="lista">${rows}</div>
+    <div class="cta-row" style="flex-wrap:wrap">
+      <button type="button" class="btn-ghost small" data-spesa-copia>📋 Copia</button>
+      <button type="button" class="btn-ghost small" data-spesa-reset>↺ Azzera spunte</button>
+      <button type="button" class="btn-ghost small" data-modal-close>Chiudi</button>
+    </div>`;
+}
+
 function regolaTesto(r) { return typeof r === "string" ? r : (r && r.testo) || ""; }
 function renderRegole() {
   const box = $("#regoleList");
@@ -400,7 +595,7 @@ function renderImpostazioni() {
 // ---------------------------------------------------------------------------
 function renderAll() {
   renderPresenti(); renderPortate(); renderNr(); renderIngChips();
-  renderRicettario(); renderCoda(); renderStorico(); renderInsegnaForm(); renderImpostazioni();
+  renderRicettario(); renderCoda(); renderStorico(); renderInsegnaForm(); renderImpostazioni(); renderPiano();
 }
 // come renderAll ma non ridisegna se l'utente sta scrivendo in un campo (non ruba il focus)
 function renderAllSafe() {
@@ -408,7 +603,7 @@ function renderAllSafe() {
   if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
   renderAll();
 }
-function renderIfVisible(screens) { if (screens.includes(ui.screen)) { if (ui.screen === "ricettario") renderRicettario(); if (ui.screen === "storico") renderStorico(); if (ui.screen === "insegna") renderCoda(); if (ui.screen === "home") { renderPresenti(); } } }
+function renderIfVisible(screens) { if (screens.includes(ui.screen)) { if (ui.screen === "ricettario") renderRicettario(); if (ui.screen === "storico") renderStorico(); if (ui.screen === "insegna") renderCoda(); if (ui.screen === "piano") renderPiano(); if (ui.screen === "home") { renderPresenti(); } } }
 
 function setScreen(name) {
   ui.screen = name;
@@ -683,6 +878,18 @@ function wire() {
     renderStorico(); renderProposte();
   });
 
+  // PIANO
+  $("#pianoBox").addEventListener("click", (e) => {
+    const v = e.target.closest("[data-pianoview]"); if (v) { ui.pianoView = v.dataset.pianoview; renderPiano(); return; }
+    const nav = e.target.closest("[data-pianonav]"); if (nav) { const dir = nav.dataset.pianonav === "next" ? 1 : -1; ui.pianoCursor = ui.pianoView === "mese" ? addMonthsISO(ui.pianoCursor, dir) : addDaysISO(ui.pianoCursor, dir * 7); renderPiano(); return; }
+    if (e.target.closest("[data-pianotoday]")) { ui.pianoCursor = ymd(); if (ui.pianoView === "agenda") ui.agendaDays = 14; renderPiano(); return; }
+    if (e.target.closest("[data-agendamore]")) { ui.agendaDays += 7; renderPiano(); return; }
+    const slot = e.target.closest("[data-slot]"); if (slot) { const [d, p] = slot.dataset.slot.split("|"); apriSlotPicker(d, p); return; }
+    const voce = e.target.closest("[data-voce]"); if (voce) { apriPianoVoce(voce.dataset.voce); return; }
+    const day = e.target.closest("[data-day]"); if (day) { apriGiorno(day.dataset.day); return; }
+    if (e.target.closest("[data-spesa]")) { apriSpesa(); return; }
+  });
+
   // IMPOSTAZIONI: profili
   const pe = $("#profiliEditor");
   pe.addEventListener("input", (e) => {
@@ -750,6 +957,31 @@ function wire() {
     if (e.target.closest("[data-addstep]")) { syncDraftFromDOM(); modalCtx.draft.passaggi.push(""); openModal(ricettaFormHTML(modalCtx.draft)); return; }
     const rmstep = e.target.closest("[data-rmstep]"); if (rmstep) { syncDraftFromDOM(); modalCtx.draft.passaggi.splice(+rmstep.dataset.rmstep, 1); openModal(ricettaFormHTML(modalCtx.draft)); return; }
     if (e.target.closest("#rSalva")) { salvaRicetta(); return; }
+    // PIANO — dentro le modali
+    const slot = e.target.closest("[data-slot]"); if (slot) { const [d, p] = slot.dataset.slot.split("|"); apriSlotPicker(d, p); return; }
+    const voce = e.target.closest("[data-voce]"); if (voce) { apriPianoVoce(voce.dataset.voce); return; }
+    const pick = e.target.closest("[data-pickric]"); if (pick) { setPiano(modalCtx.data, modalCtx.pasto, pick.dataset.pickric); closeModal(); renderPiano(); toast("Pianificato ✓"); return; }
+    if (e.target.closest("[data-proponi-slot]")) { proponiPerSlot(); return; }
+    if (e.target.closest("[data-voce-cambia]")) { apriSlotPicker(modalCtx.data, modalCtx.pasto); return; }
+    if (e.target.closest("[data-voce-fatto]")) { pianoFatto(modalCtx.uid); closeModal(); renderPiano(); renderStorico(); toast("Segnato come fatto ✓"); return; }
+    if (e.target.closest("[data-voce-rimuovi]")) { rimuoviPiano(modalCtx.uid); closeModal(); renderPiano(); return; }
+    if (e.target.closest("[data-spesa-copia]")) {
+      const txt = listaSpesa({ piano: PIANO, ricette: RICETTE, dispensa: DISPENSA, oggi: new Date() }).map((i) => `- ${i.nome}: ${i.quantita}`).join("\n");
+      (async () => { try { await navigator.clipboard.writeText(txt); toast("Lista copiata 📋"); } catch { toast("Copia non riuscita"); } })(); return;
+    }
+    if (e.target.closest("[data-spesa-reset]")) { save(LS.spesaCheck, []); openModal(spesaHTML()); return; }
+  });
+  // ricerca live nel picker ricetta (aggiorna solo la lista, non perde il focus)
+  $("#modal").addEventListener("input", (e) => {
+    if (e.target.id === "slotSearch" && modalCtx && modalCtx.kind === "slot") { modalCtx.q = e.target.value; const l = $("#slotList"); if (l) l.innerHTML = slotListHTML(); }
+  });
+  // spunte lista spesa (persistite in locale)
+  $("#modal").addEventListener("change", (e) => {
+    const c = e.target.closest("[data-spesacheck]"); if (!c) return;
+    const set = new Set(load(LS.spesaCheck, []));
+    if (c.checked) set.add(c.dataset.spesacheck); else set.delete(c.dataset.spesacheck);
+    save(LS.spesaCheck, [...set]);
+    const row = c.closest(".spesa-row"); if (row) row.classList.toggle("done", c.checked);
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#modal").hidden) closeModal(); });
 }
