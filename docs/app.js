@@ -7,7 +7,7 @@ import {
 } from "./engine.js";
 import { Sync, load, save, mkUid, newDeviceId, mergeLog } from "./sync.js";
 
-const APP_VERSION = "v13";
+const APP_VERSION = "v14";
 
 // ---------------------------------------------------------------------------
 // Chiavi localStorage + stato
@@ -459,6 +459,16 @@ function rimuoviPiano(uid) {
   PIANO = PIANO.filter((x) => x.uid !== uid); save(LS.piano, PIANO);
   if (e && e.id) deleteFromCloud("piano", e.id);
 }
+// registra un pasto "Fatto" da qualunque punto: finisce SIA nel Piano SIA nello Storico
+function registraFatto({ ricettaId, data, pasto, presenti, ospiti }) {
+  for (const e of PIANO.filter((x) => x.data === data && x.pasto === pasto)) { if (e.stato === "fatto") removeTwin(e.uid); if (e.id) deleteFromCloud("piano", e.id); }
+  PIANO = PIANO.filter((x) => !(x.data === data && x.pasto === pasto));
+  const e = { uid: mkUid(DEVICE_ID), data, pasto, ricettaId, presenti: (presenti || Object.keys(PROFILI)).slice(), ospiti: ospiti || 0, stato: "fatto", byDevice: DEVICE_ID, ts: Date.now(), posted: false };
+  PIANO.push(e); save(LS.piano, PIANO);
+  if (SYNC.on && sync.enabled) postLog("piano", e);
+  syncTwin(e); // crea la voce gemella nello storico (stessa uid)
+  return e;
+}
 
 function slotHTML(data, pasto) {
   const e = pianoSlot(data, pasto);
@@ -719,12 +729,9 @@ function salvaPasto() {
   const presenti = $$("#mpPresenti .chip.on").map((c) => c.dataset.mp);
   const tsFor = (d) => { const t = new Date(d + "T12:00:00").getTime(); return isNaN(t) ? Date.now() : t; };
   if (modalCtx.mode === "new") {
-    const r = RICETTE.find((x) => x.id === modalCtx.ricettaId);
-    const e = { uid: mkUid(DEVICE_ID), ricettaId: modalCtx.ricettaId, nome: r ? r.nome : "", data, pasto, presenti, ospiti: modalCtx.ospiti || 0, byDevice: DEVICE_ID, ts: tsFor(data), posted: false };
-    STORICO.push(e); save(LS.storico, STORICO);
-    if (SYNC.on && sync.enabled) postLog("storico", e);
+    registraFatto({ ricettaId: modalCtx.ricettaId, data, pasto, presenti, ospiti: modalCtx.ospiti || 0 });
     ui.proposte = ui.proposte.filter((p) => p.id !== modalCtx.ricettaId);
-    toast("Segnato! Non tornerà per 7 giorni 👌");
+    toast("Segnato! È nello Storico e nel Piano 👌");
   } else {
     const e = STORICO.find((x) => x.uid === modalCtx.uid);
     if (e) {
@@ -737,7 +744,7 @@ function salvaPasto() {
     }
     toast("Pasto aggiornato ✓");
   }
-  closeModal(); renderProposte(); renderStorico();
+  closeModal(); renderProposte(); renderStorico(); renderPiano();
 }
 
 // ---- Modifica una RICETTA (ingredienti / preparazione / dettagli) ----
@@ -944,9 +951,9 @@ function wire() {
     const uid = b.dataset.delstorico; const ev = STORICO.find((x) => x.uid === uid);
     STORICO = STORICO.filter((x) => x.uid !== uid); save(LS.storico, STORICO);
     if (ev && ev.id) deleteFromCloud("storico", ev.id);
-    // se è il gemello di un pasto Fatto del Piano, riportalo a "In programma"
+    // il "fatto" è un'unica voce: eliminandolo dallo Storico sparisce anche dal Piano
     const pe = PIANO.find((x) => x.uid === uid);
-    if (pe && pe.stato === "fatto") { pe.stato = "programma"; save(LS.piano, PIANO); if (SYNC.on && sync.enabled && pe.id) sync.patch("piano/" + pe.id, { stato: "programma" }); renderPiano(); }
+    if (pe) { PIANO = PIANO.filter((x) => x.uid !== uid); save(LS.piano, PIANO); if (pe.id) deleteFromCloud("piano", pe.id); renderPiano(); }
     renderStorico(); renderProposte();
   });
 
