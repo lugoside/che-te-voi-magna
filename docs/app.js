@@ -7,7 +7,7 @@ import {
 } from "./engine.js";
 import { Sync, load, save, mkUid, newDeviceId, mergeLog } from "./sync.js";
 
-const APP_VERSION = "v15";
+const APP_VERSION = "v16";
 
 // ---------------------------------------------------------------------------
 // Chiavi localStorage + stato
@@ -337,19 +337,27 @@ const ESEMPI = {
 function renderInsegnaForm() { $("#obsEsempio").textContent = ESEMPI[ui.obsTipo] || ""; $("#obsTipo").value = ui.obsTipo; }
 function tipoLabel(t) { return ({ "nuova-ricetta": "💡 Nuova ricetta", "importa-url": "🔗 Importa", "regola": "📏 Regola", "correzione": "✏️ Correzione" })[t] || t; }
 function renderCoda() {
-  const pending = CODA.filter((c) => c.stato !== "processed");
+  const all = reduceStorico(CODA).slice().reverse(); // dedup + ordina (recenti in alto)
+  const pending = all.filter((c) => c.stato !== "processed");
+  const done = all.filter((c) => c.stato === "processed");
   $("#codaCount").textContent = pending.length;
   const box = $("#listaCoda");
-  const list = reduceStorico(CODA).slice().reverse(); // riuso il reducer (dedup+ordina)
-  if (!list.length) { box.innerHTML = `<div class="empty">Ancora niente in coda.</div>`; return; }
-  box.innerHTML = list.map((c) => `
+  const riga = (c) => `
     <div class="riga">
       <div class="r-main">
         <div class="r-title">${esc(c.testo || "")}</div>
-        <div class="r-sub">${tipoLabel(c.tipo)} · <span class="stato-pill ${c.stato === "processed" ? "processed" : "pending"}">${c.stato === "processed" ? "fatto" : "in attesa"}</span></div>
+        <div class="r-sub">${tipoLabel(c.tipo)}</div>
       </div>
       ${c.stato !== "processed" ? `<button class="icon-btn" data-delobs="${esc(c.uid)}">🗑️</button>` : ""}
-    </div>`).join("");
+    </div>`;
+  if (!all.length) { box.innerHTML = `<div class="empty">Ancora niente in coda.</div>`; return; }
+  let html = `<div class="coda-sez">⏳ Da elaborare <span class="sez-count">${pending.length}</span></div>`;
+  html += pending.length ? pending.map(riga).join("") : `<div class="empty small">Niente in attesa: tutto elaborato 👌</div>`;
+  if (done.length) {
+    html += `<div class="coda-sez done">✅ Già elaborate <span class="sez-count">${done.length}</span></div>`;
+    html += done.map(riga).join("");
+  }
+  box.innerHTML = html;
 }
 
 // ---------------------------------------------------------------------------
