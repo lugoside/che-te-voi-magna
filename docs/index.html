@@ -106,7 +106,11 @@
           <h2 class="q">In coda <span id="codaCount" class="badge">0</span></h2>
           <button type="button" id="copiaComando" class="btn-ghost small">📋 Copia comando</button>
         </div>
-        <p class="hint">In Claude Code lancia: <code>/che-te-voi-magna</code></p>
+        <button type="button" id="elaboraCoda" class="btn-primary">⚡ Elabora la coda ora</button>
+        <p id="elaboraStato" class="hint"></p>
+        <p class="hint">Fa girare Claude <b>adesso</b> su GitHub (~2-3 min) e aggiorna il ricettario da solo.
+          Richiede il token GitHub in <b>Impostazioni → Claude</b> (una volta sola).<br>
+          In alternativa, da PC in Claude Code: <code>/che-te-voi-magna</code>.</p>
         <div id="listaCoda" class="lista"></div>
       </div>
     </section>
@@ -167,6 +171,21 @@
           <option value="claude-opus-5">Claude Opus 5 (qualità massima)</option>
           <option value="claude-sonnet-5">Claude Sonnet 5 (più economico)</option>
         </select>
+        <details class="gh-tok" style="margin-top:12px">
+          <summary class="lbl" style="cursor:pointer">🔑 Token GitHub per «⚡ Elabora la coda ora» (una volta sola)</summary>
+          <p class="hint" id="ghTokenStatus" style="margin:6px 0"></p>
+          <input id="ghToken" type="password" placeholder="Incolla il token (github_pat_…)" autocomplete="off" />
+          <div class="btn-grid" style="margin-top:6px">
+            <button type="button" id="ghTokenSave" class="btn-ghost small">Salva token</button>
+            <button type="button" id="ghTokenClear" class="btn-ghost small">Rimuovi</button>
+          </div>
+          <p class="hint" style="margin-top:6px">
+            Crea un <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">fine-grained token</a>:
+            <b>Repository access</b> → solo <b>che-te-voi-magna</b>;
+            <b>Permissions → Repository → Actions: Read and write</b>. Nient'altro.
+            Resta salvato <b>solo su questo dispositivo</b> (mai nel codice né nel repo).
+          </p>
+        </details>
       </div>
 
       <div class="card">

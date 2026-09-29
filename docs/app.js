@@ -7,7 +7,7 @@ import {
 } from "./engine.js";
 import { Sync, load, save, mkUid, newDeviceId, mergeLog } from "./sync.js";
 
-const APP_VERSION = "v14";
+const APP_VERSION = "v15";
 
 // ---------------------------------------------------------------------------
 // Chiavi localStorage + stato
@@ -16,7 +16,7 @@ const LS = {
   config: "ctvm_config", sync: "ctvm_sync", device: "ctvm_device", ui: "ctvm_ui",
   profili: "ctvm_profili", dispensa: "ctvm_dispensa", regole: "ctvm_regole",
   ricette: "ctvm_ricette", storico: "ctvm_storico", coda: "ctvm_coda",
-  piano: "ctvm_piano", spesaCheck: "ctvm_spesa_check",
+  piano: "ctvm_piano", spesaCheck: "ctvm_spesa_check", ghToken: "ctvm_gh_token",
 };
 
 const defaultProfili = () => ({
@@ -350,6 +350,80 @@ function renderCoda() {
       </div>
       ${c.stato !== "processed" ? `<button class="icon-btn" data-delobs="${esc(c.uid)}">🗑️</button>` : ""}
     </div>`).join("");
+}
+
+// ---------------------------------------------------------------------------
+// Elabora la coda ORA dall'app: avvia il workflow GitHub Actions (lo stesso dello
+// skill /che-te-voi-magna) e ricarica quando è pronto. Gratis (repo pubblico →
+// Actions illimitate). Il token fine-grained (Actions: RW su questo repo) sta SOLO
+// nel localStorage del dispositivo, mai nel codice/repo.
+// ---------------------------------------------------------------------------
+const GH_REPO = "lugoside/che-te-voi-magna";
+const GH_WF = "che-te-voi-magna.yml";
+const _sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function ghTokenStatus() {
+  const el = $("#ghTokenStatus"); if (!el) return;
+  const t = load(LS.ghToken, "");
+  el.textContent = t
+    ? `✅ Token salvato (…${String(t).slice(-4)}). Il pulsante ⚡ è pronto.`
+    : `⚠️ Nessun token: ⚡ non può partire finché non lo aggiungi.`;
+}
+async function dispatchElabora(btn) {
+  const stato = $("#elaboraStato");
+  const set = (t) => { if (stato) stato.textContent = t; };
+  const tok = load(LS.ghToken, "");
+  if (!tok) {
+    toast("Aggiungi prima il token GitHub in Impostazioni → Claude");
+    set("⚠️ Manca il token GitHub: configuralo in Impostazioni → Claude → 🔑 (una volta sola).");
+    return;
+  }
+  if (!CODA.some((c) => c.stato !== "processed")) { toast("La coda è vuota: niente da elaborare"); return; }
+  const api = `https://api.github.com/repos/${GH_REPO}`;
+  const H = { "Authorization": "Bearer " + tok, "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
+  const orig = btn ? btn.textContent : "";
+  if (btn) btn.disabled = true;
+  try {
+    set("🚀 Avvio elaborazione su GitHub…");
+    const since = Date.now() - 90000; // margine per riconoscere la run nuova
+    const disp = await fetch(`${api}/actions/workflows/${GH_WF}/dispatches`, { method: "POST", headers: H, body: JSON.stringify({ ref: "main" }) });
+    if (disp.status !== 204) {
+      const msg = disp.status === 401 ? "token non valido/scaduto"
+        : disp.status === 403 ? "permessi insufficienti (serve Actions: Read and write)"
+        : disp.status === 404 ? "repo/workflow non raggiungibile col token"
+        : "errore " + disp.status;
+      set("⚡ Non avviato: " + msg); toast("⚡ Non avviato: " + msg); return;
+    }
+    set("⏳ In coda su GitHub…");
+    let runId = null;
+    for (let i = 0; i < 12 && !runId; i++) {
+      await _sleep(3000);
+      const r = await fetch(`${api}/actions/workflows/${GH_WF}/runs?event=workflow_dispatch&per_page=5`, { headers: H });
+      const j = await r.json().catch(() => ({}));
+      const cand = (j.workflow_runs || []).find((w) => new Date(w.created_at).getTime() >= since);
+      if (cand) runId = cand.id;
+    }
+    if (!runId) { set("Run avviata: controlla su GitHub, poi ricarica."); toast("Run avviata su GitHub"); return; }
+    for (let i = 0; i < 90; i++) { // ~fino a 7-8 min
+      await _sleep(5000);
+      const w = await fetch(`${api}/actions/runs/${runId}`, { headers: H }).then((r) => r.json()).catch(() => ({}));
+      set(`⏳ Elaborazione in corso… (${w.status || "…"})`);
+      if (w.status === "completed") {
+        if (w.conclusion !== "success") { set(`⚡ Terminata con esito: ${w.conclusion || "errore"}`); toast(`⚡ Terminata: ${w.conclusion || "errore"}`); return; }
+        set("⏳ Aggiorno il ricettario…");
+        await _sleep(4000); // margine per la scrittura su Firebase
+        await reconcile(); renderAllSafe();
+        set("✅ Fatto! Coda elaborata e ricettario aggiornato.");
+        toast("✅ Coda elaborata");
+        return;
+      }
+    }
+    set("Ancora in corso: ricontrolla tra poco (la run continua su GitHub).");
+  } catch {
+    set("⚡ Errore di rete durante l'elaborazione");
+    toast("⚡ Errore di rete");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = orig; }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -937,6 +1011,14 @@ function wire() {
   $("#obsTipo").addEventListener("change", (e) => { ui.obsTipo = e.target.value; saveUI(); renderInsegnaForm(); });
   $("#obsAdd").addEventListener("click", aggiungiOsservazione);
   $("#copiaComando").addEventListener("click", async () => { try { await navigator.clipboard.writeText(comandoRigenera()); toast("Comando copiato 📋"); } catch { toast(comandoRigenera()); } });
+  $("#elaboraCoda").addEventListener("click", (e) => dispatchElabora(e.currentTarget));
+  $("#ghTokenSave").addEventListener("click", () => {
+    const inp = $("#ghToken"); const v = (inp?.value || "").trim();
+    if (!v) { toast("Incolla il token prima di salvare"); return; }
+    save(LS.ghToken, v); if (inp) inp.value = ""; ghTokenStatus(); toast("Token salvato su questo dispositivo");
+  });
+  $("#ghTokenClear").addEventListener("click", () => { save(LS.ghToken, ""); ghTokenStatus(); toast("Token rimosso"); });
+  ghTokenStatus();
   $("#listaCoda").addEventListener("click", (e) => {
     const b = e.target.closest("[data-delobs]"); if (!b) return;
     const uid = b.dataset.delobs; const c = CODA.find((x) => x.uid === uid);
