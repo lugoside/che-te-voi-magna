@@ -2,8 +2,9 @@
 // Niente dipendenze: asserzioni fatte a mano.
 import {
   proponi, ricetteRecenti, stagioneCorrente, norm, reduceStorico, normalizeRicetta,
-  listaSpesa, ymd, repartoDi, scalaQ, commensaliDi,
+  listaSpesa, ymd, repartoDi, scalaQ, commensaliDi, inDispensa,
 } from "../docs/engine.js";
+import { Sync } from "../docs/sync.js";
 
 let pass = 0, fail = 0;
 function ok(cond, msg) { if (cond) { pass++; } else { fail++; console.error("  ✗ " + msg); } }
@@ -135,6 +136,36 @@ const PIANO3 = [
 const spesa3 = listaSpesa({ piano: PIANO3, ricette: RIC_SPESA, dispensa: ["sale"], oggi: OGGI });
 ok(spesa3.some((x) => x.nome === "pasta"), "ricetta 'programma' inclusa");
 ok(!spesa3.some((x) => x.nome === "tonno"), "ricette 'fatto'/'dispensa' escluse dalla spesa");
+
+// --- dispensa: match a PAROLA intera ---------------------------------------
+console.log("inDispensa()");
+const DISP = ["olio", "sale", "acqua", "pepe"].map(norm);
+ok(inDispensa(norm("sale grosso"), DISP), "'sale grosso' è dispensa");
+ok(inDispensa(norm("Olio extravergine d'oliva"), DISP), "'olio extravergine' è dispensa");
+ok(!inDispensa(norm("peperoni"), DISP), "'peperoni' NON è 'pepe'");
+ok(!inDispensa(norm("peperoncino"), DISP), "'peperoncino' NON è 'pepe'");
+ok(!inDispensa(norm("salmone"), DISP), "'salmone' NON è 'sale'");
+const spesaPep = listaSpesa({ piano: [{ uid: "p1", data: "2026-08-25", pasto: "cena", ricettaId: "pp", stato: "programma" }],
+  ricette: [{ id: "pp", nome: "Peperonata", ingredienti: [{ nome: "peperoni", q: 2 }, { nome: "pepe" }, { nome: "sale" }] }],
+  dispensa: ["pepe", "sale"], oggi: OGGI });
+eq(spesaPep.map((x) => x.nome), ["peperoni"], "peperoni in lista spesa, pepe/sale no");
+
+// --- sync: un errore non è mai un "nodo vuoto" ------------------------------
+console.log("Sync.request()");
+const sy = new Sync({ url: "https://x.example", code: "fam" });
+const mockFetch = (status, body) => { globalThis.fetch = async () => ({ ok: status >= 200 && status < 300, status, json: async () => body }); };
+mockFetch(401, { error: "Permission denied" });
+let rq = await sy.get("ricette"); ok(!rq.ok && rq.data === null, "401 Permission denied → ok:false");
+mockFetch(200, { error: "Permission denied" });
+rq = await sy.get("ricette"); ok(!rq.ok, "corpo {error} anche con 200 → ok:false");
+mockFetch(200, null);
+rq = await sy.get("ricette"); ok(rq.ok && rq.data === null, "200 null → nodo vuoto legittimo");
+mockFetch(503, null);
+ok((await sy.put("config", {})) === false, "PUT 503 → false");
+globalThis.fetch = async () => { throw new TypeError("offline"); };
+rq = await sy.get("ricette"); ok(!rq.ok && rq.status === 0, "rete giù → ok:false, status 0");
+mockFetch(200, { name: "-Nabc" });
+eq(await sy.append("storico", { uid: "u" }), "-Nabc", "POST ok → pushId");
 
 // --- esito -----------------------------------------------------------------
 console.log(`\n${pass} passati, ${fail} falliti`);

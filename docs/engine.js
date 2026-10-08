@@ -88,6 +88,13 @@ export function norm(s) {
   return out.replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+// un ingrediente (già norm) è uno staple di dispensa se ne contiene una voce come
+// PAROLA intera: "sale grosso" ⊃ "sale", ma "peperoni" ⊅ "pepe".
+export function inDispensa(n, dispNorm) {
+  const padded = ` ${n} `;
+  return dispNorm.some((d) => d && padded.includes(` ${d} `));
+}
+
 // data locale in formato YYYY-MM-DD (niente UTC: conta il giorno "di casa")
 export function ymd(d = new Date()) {
   const x = new Date(d);
@@ -330,7 +337,7 @@ export function listaSpesa(opts = {}) {
     for (const ing of r.ingredienti) {
       const n = norm(ing.nome);
       if (!n) continue;
-      if (dispSet.some((d) => n === d || n.includes(d))) continue; // salta dispensa
+      if (inDispensa(n, dispSet)) continue; // salta dispensa
       if (!items.has(n)) items.set(n, { nome: ing.nome, units: new Map(), fonti: new Set(), reparto: repartoDi(ing.nome) });
       const it = items.get(n);
       it.fonti.add(r.nome);

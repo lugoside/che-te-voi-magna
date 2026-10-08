@@ -1,13 +1,13 @@
 // app.js — logica dell'interfaccia di "Che te voi magnà?".
 // Collega il motore di selezione (engine.js), la sync famigliare (sync.js) e il DOM.
 import {
-  proponi, reduceStorico, normalizeRicetta, toList, norm,
+  proponi, reduceStorico, normalizeRicetta, toList, norm, inDispensa,
   PORTATE, PORTATA_NOME, listaSpesa, ymd,
   PORZIONI_BASE, scalaIngredienti, commensaliDi, REPARTI,
 } from "./engine.js";
 import { Sync, load, save, mkUid, newDeviceId, mergeLog } from "./sync.js";
 
-const APP_VERSION = "v17";
+const APP_VERSION = "v18";
 
 // ---------------------------------------------------------------------------
 // Chiavi localStorage + stato
@@ -17,6 +17,7 @@ const LS = {
   profili: "ctvm_profili", dispensa: "ctvm_dispensa", regole: "ctvm_regole",
   ricette: "ctvm_ricette", storico: "ctvm_storico", coda: "ctvm_coda",
   piano: "ctvm_piano", spesaCheck: "ctvm_spesa_check", ghToken: "ctvm_gh_token",
+  outbox: "ctvm_outbox",
 };
 
 const defaultProfili = () => ({
@@ -70,23 +71,46 @@ sync.onStatus = (s) => setDot(SYNC.on ? s : "off");
 let _pollId = null;
 
 function ricetteToObj(list) { const o = {}; for (const r of list) { const { id, ...rest } = r; if (id != null) o[id] = rest; } return o; }
-// fetch che distingue "vuoto" da "errore di rete" (per potare in sicurezza)
-async function getNode(path) {
-  const u = sync.nodeUrl(path); if (!u) return { ok: false, data: null };
-  try { const r = await fetch(u + ".json", { cache: "no-store" }); return { ok: true, data: await r.json() }; }
-  catch { return { ok: false, data: null }; }
+
+// ---------------------------------------------------------------------------
+// Outbox: modifiche (PUT/PATCH/DELETE) in attesa di arrivare al cloud.
+// Persistita in localStorage → le modifiche fatte offline non si perdono e non
+// vengono "annullate" dal reconcile (che adotta la copia cloud): finché l'outbox
+// non è vuota, il reconcile NON fonde nulla dal cloud.
+// ---------------------------------------------------------------------------
+let OUTBOX = load(LS.outbox, []);
+let _flushing = null;
+function cloudOp(method, path, body) {
+  if (!SYNC.on || !sync.enabled) return Promise.resolve();
+  OUTBOX.push({ method, path, body }); save(LS.outbox, OUTBOX);
+  return flushOutbox();
+}
+function flushOutbox() {
+  if (_flushing) return _flushing;
+  _flushing = (async () => {
+    while (OUTBOX.length && SYNC.on && sync.enabled) {
+      const o = OUTBOX[0];
+      const r = await sync.request(o.method, o.path, o.body);
+      // errore di rete o 5xx → riprova più tardi; altri 4xx → operazione non valida, scartala
+      if (!r.ok && (r.status === 0 || r.status >= 500 || r.status === 401 || r.status === 403)) break;
+      OUTBOX.shift(); save(LS.outbox, OUTBOX);
+    }
+  })().finally(() => { _flushing = null; });
+  return _flushing;
 }
 
 async function reconcile() {
   if (!SYNC.on || !sync.enabled) return;
   try {
-    const [rc, rp, rd, rr, rric] = await Promise.all([
-      sync.get("config"), sync.get("profili"), sync.get("dispensa"),
-      sync.get("regole"), sync.get("ricette"),
-    ]);
-    const rsN = await getNode("storico");
-    const rqN = await getNode("coda");
-    const rpN = await getNode("piano");
+    // 1) prima le mie modifiche pendenti: se non passano, non adotto nulla dal cloud
+    await flushOutbox();
+    if (OUTBOX.length) return;
+    // 2) snapshot: se ANCHE UNA lettura fallisce (rete, 403, 5xx) mi fermo qui.
+    //    Un errore non è mai "nodo vuoto": niente semina/sovrascrittura del cloud
+    //    e niente potatura del locale sulla base di dati mancanti.
+    const res = await Promise.all(["config", "profili", "dispensa", "regole", "ricette", "storico", "coda", "piano"].map((p) => sync.get(p)));
+    if (res.some((r) => !r.ok)) return;
+    const [rc, rp, rd, rr, rric, rs, rq, rpl] = res.map((r) => r.data);
     let changed = false;
     const differ = (a, b) => JSON.stringify(a) !== JSON.stringify(b);
     const sortById = (l) => [...l].sort((a, b) => (String(a.id) < String(b.id) ? -1 : 1));
@@ -99,17 +123,16 @@ async function reconcile() {
     const remoteRic = toList(rric);
     if (remoteRic.length) { if (differ(sortById(remoteRic), sortById(RICETTE))) { RICETTE = remoteRic; save(LS.ricette, RICETTE); changed = true; } }
     else if (RICETTE.length) await sync.put("ricette", ricetteToObj(RICETTE));
-    // log append-only
     // log append-only: fondi le novità dal cloud e POTA le voci cancellate da remoto
-    // (solo se il fetch è andato a buon fine → niente cancellazioni per colpa della rete)
-    const ms = mergeLog(STORICO, rsN.data); if (ms.changed) { STORICO = ms.log; changed = true; }
-    if (rsN.ok) { const ids = new Set(Object.keys(rsN.data || {})); const n = STORICO.length; STORICO = STORICO.filter((e) => !e.id || ids.has(e.id)); if (STORICO.length !== n) changed = true; }
+    // (qui tutte le letture sono andate a buon fine → la potatura è sicura)
+    const ms = mergeLog(STORICO, rs); if (ms.changed) { STORICO = ms.log; changed = true; }
+    { const ids = new Set(Object.keys(rs || {})); const n = STORICO.length; STORICO = STORICO.filter((e) => !e.id || ids.has(e.id)); if (STORICO.length !== n) changed = true; }
     save(LS.storico, STORICO);
-    const mq = mergeLog(CODA, rqN.data); if (mq.changed) { CODA = mq.log; changed = true; }
-    if (rqN.ok) { const ids = new Set(Object.keys(rqN.data || {})); const n = CODA.length; CODA = CODA.filter((e) => !e.id || ids.has(e.id)); if (CODA.length !== n) changed = true; }
+    const mq = mergeLog(CODA, rq); if (mq.changed) { CODA = mq.log; changed = true; }
+    { const ids = new Set(Object.keys(rq || {})); const n = CODA.length; CODA = CODA.filter((e) => !e.id || ids.has(e.id)); if (CODA.length !== n) changed = true; }
     save(LS.coda, CODA);
-    const mp = mergeLog(PIANO, rpN.data); if (mp.changed) { PIANO = mp.log; changed = true; }
-    if (rpN.ok) { const ids = new Set(Object.keys(rpN.data || {})); const n = PIANO.length; PIANO = PIANO.filter((e) => !e.id || ids.has(e.id)); if (PIANO.length !== n) changed = true; }
+    const mp = mergeLog(PIANO, rpl); if (mp.changed) { PIANO = mp.log; changed = true; }
+    { const ids = new Set(Object.keys(rpl || {})); const n = PIANO.length; PIANO = PIANO.filter((e) => !e.id || ids.has(e.id)); if (PIANO.length !== n) changed = true; }
     save(LS.piano, PIANO);
     await flushPending();
     if (changed) renderAllSafe();
@@ -170,17 +193,16 @@ function startSync() {
   if (!SYNC.on || !sync.enabled) { setDot("off"); return; }
   reconcile().then(subscribeAll);
   if (!_pollId) _pollId = setInterval(() => reconcile(), 15000);
+  if (!startSync._online) { startSync._online = true; window.addEventListener("online", () => reconcile()); }
 }
 function stopSync() { sync.closeStreams(); if (_pollId) { clearInterval(_pollId); _pollId = null; } setDot("off"); }
 
 // pubblica un documento condiviso (config/profili/dispensa/regole)
-function pushDoc(path, val) { if (SYNC.on && sync.enabled) sync.put(path, val); }
+function pushDoc(path, val) { cloudOp("PUT", path, val); }
+// aggiornamento parziale di un elemento (passa dall'outbox: sopravvive all'offline)
+function patchCloud(path, obj) { cloudOp("PATCH", path, obj); }
 // cancella un elemento di un log dal cloud (per non farlo ripristinare dal sync)
-async function deleteFromCloud(path, id) {
-  if (!SYNC.on || !sync.enabled || !id) return;
-  const u = sync.nodeUrl(path + "/" + id); if (!u) return;
-  try { await fetch(u + ".json", { method: "DELETE" }); } catch {}
-}
+function deleteFromCloud(path, id) { if (id) cloudOp("DELETE", path + "/" + id); }
 
 // ---------------------------------------------------------------------------
 // DOM helpers
@@ -197,7 +219,7 @@ function esc(s) { return fixMojibake(String(s == null ? "" : s)).replace(/[&<>"'
 function setDot(s) { const d = $("#syncDot"); if (d) d.className = "sync-dot " + s; const st = $("#syncStato"); if (st) st.textContent = ({ ok: "connesso ✓", err: "in attesa…", off: "spenta" })[s] || s; }
 let toastTimer;
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200); }
-const todayISO = () => new Date().toISOString().slice(0, 10);
+const todayISO = () => ymd(); // data locale, non UTC (in UTC tra 00:00 e 02:00 italiane è ancora "ieri")
 
 // --- modale generica ---
 let modalCtx = null;
@@ -207,7 +229,7 @@ function closeModal() { $("#modal").hidden = true; $("#modalBody").innerHTML = "
 // nasconde gli staple di dispensa dalle liste ingredienti (sono sempre in casa)
 function senzaDispensa(ingredienti) {
   const disp = DISPENSA.map(norm);
-  return (ingredienti || []).filter((i) => { const n = norm(i.nome); return !disp.some((d) => n === d || n.includes(d)); });
+  return (ingredienti || []).filter((i) => !inDispensa(norm(i.nome), disp));
 }
 function fmtIngrediente(i) {
   const q = i.q != null && i.q !== "" ? `${i.q}${i.unita ? " " + i.unita : ""}` : "";
@@ -335,7 +357,7 @@ const ESEMPI = {
   "correzione": "es. «nella torta di mele metti 120g di zucchero, non 150»",
 };
 function renderInsegnaForm() { $("#obsEsempio").textContent = ESEMPI[ui.obsTipo] || ""; $("#obsTipo").value = ui.obsTipo; }
-function tipoLabel(t) { return ({ "nuova-ricetta": "💡 Nuova ricetta", "importa-url": "🔗 Importa", "regola": "📏 Regola", "correzione": "✏️ Correzione" })[t] || t; }
+function tipoLabel(t) { return ({ "nuova-ricetta": "💡 Nuova ricetta", "importa-url": "🔗 Importa", "regola": "📏 Regola", "correzione": "✏️ Correzione" })[t] || esc(t); }
 function renderCoda() {
   const all = reduceStorico(CODA).slice().reverse(); // dedup + ordina (recenti in alto)
   const pending = all.filter((c) => c.stato !== "processed");
@@ -504,7 +526,7 @@ function syncTwin(e) {
   const r = RICETTE.find((x) => x.id === e.ricettaId);
   const body = { ricettaId: e.ricettaId, nome: r ? r.nome : "", data: e.data, pasto: e.pasto, presenti: (e.presenti || Object.keys(PROFILI)).slice(), ospiti: e.ospiti || 0 };
   const tw = STORICO.find((x) => x.uid === e.uid);
-  if (tw) { Object.assign(tw, body); save(LS.storico, STORICO); if (SYNC.on && sync.enabled && tw.id) sync.patch("storico/" + tw.id, body); }
+  if (tw) { Object.assign(tw, body); save(LS.storico, STORICO); if (tw.id) patchCloud("storico/" + tw.id, body); }
   else { const nw = { uid: e.uid, ...body, byDevice: DEVICE_ID, ts: tsFor(e.data), posted: false }; STORICO.push(nw); save(LS.storico, STORICO); if (SYNC.on && sync.enabled) postLog("storico", nw); }
 }
 function removeTwin(uid) {
@@ -525,13 +547,13 @@ function setPiano(data, pasto, ricettaId) {
 function updatePianoMeal(uid, patch) {
   const e = PIANO.find((x) => x.uid === uid); if (!e) return;
   Object.assign(e, patch); save(LS.piano, PIANO);
-  if (SYNC.on && sync.enabled && e.id) sync.patch("piano/" + e.id, patch);
+  if (e.id) patchCloud("piano/" + e.id, patch);
   if (e.stato === "fatto") syncTwin(e); // tieni allineato il gemello nello storico
 }
 function setPianoStato(uid, stato) {
   const e = PIANO.find((x) => x.uid === uid); if (!e) return;
   e.stato = stato; save(LS.piano, PIANO);
-  if (SYNC.on && sync.enabled && e.id) sync.patch("piano/" + e.id, { stato });
+  if (e.id) patchCloud("piano/" + e.id, { stato });
   if (stato === "fatto") syncTwin(e); else removeTwin(uid);
   renderStorico();
 }
@@ -819,10 +841,10 @@ function salvaPasto() {
     if (e) {
       e.data = data; e.pasto = pasto; e.presenti = presenti; e.ospiti = modalCtx.ospiti || 0; e.ts = tsFor(data);
       save(LS.storico, STORICO);
-      if (SYNC.on && sync.enabled && e.id) sync.patch("storico/" + e.id, { data, pasto, presenti, ospiti: e.ospiti, ts: e.ts });
+      if (e.id) patchCloud("storico/" + e.id, { data, pasto, presenti, ospiti: e.ospiti, ts: e.ts });
       // se è il gemello di un pasto del Piano, allinealo
       const pe = PIANO.find((x) => x.uid === modalCtx.uid);
-      if (pe) { Object.assign(pe, { data, pasto, presenti, ospiti: modalCtx.ospiti || 0 }); save(LS.piano, PIANO); if (SYNC.on && sync.enabled && pe.id) sync.patch("piano/" + pe.id, { data, pasto, presenti, ospiti: pe.ospiti }); }
+      if (pe) { Object.assign(pe, { data, pasto, presenti, ospiti: modalCtx.ospiti || 0 }); save(LS.piano, PIANO); if (pe.id) patchCloud("piano/" + pe.id, { data, pasto, presenti, ospiti: pe.ospiti }); }
     }
     toast("Pasto aggiornato ✓");
   }
@@ -834,7 +856,7 @@ function ricettaFormHTML(d) {
   const ing = (d.ingredienti || []).map((i, idx) => `
     <div class="ed-row" data-i="${idx}">
       <input class="grow" data-f="nome" value="${esc(i.nome || "")}" placeholder="ingrediente">
-      <input class="q-in" data-f="q" value="${i.q ?? ""}" placeholder="q">
+      <input class="q-in" data-f="q" value="${esc(i.q ?? "")}" placeholder="q">
       <input class="u-in" data-f="unita" value="${esc(i.unita || "")}" placeholder="unità">
       <button type="button" class="icon-btn" data-rming="${idx}">🗑️</button>
     </div>`).join("");
@@ -900,7 +922,7 @@ function salvaRicetta() {
   if (!d.nome) { toast("Serve almeno il nome"); return; }
   const i = RICETTE.findIndex((x) => x.id === modalCtx.id);
   if (i >= 0) { RICETTE[i] = { ...RICETTE[i], ...d }; save(LS.ricette, RICETTE);
-    if (SYNC.on && sync.enabled) { const { id, ...rest } = RICETTE[i]; sync.put("ricette/" + id, rest); } }
+    { const { id, ...rest } = RICETTE[i]; pushDoc("ricette/" + id, rest); } }
   closeModal(); renderRicettario(); toast("Ricetta aggiornata ✓");
 }
 
@@ -1098,7 +1120,10 @@ function wire() {
 
   // IMPOSTAZIONI: sync + modello
   const applySync = () => {
+    const prev = SYNC;
     SYNC = { url: $("#syncUrl").value.trim(), code: $("#syncCode").value.trim(), on: $("#syncOn").checked };
+    // cambio database/famiglia: le modifiche pendenti erano per l'altro → non rigiocarle qui
+    if (prev.url !== SYNC.url || prev.code !== SYNC.code) { OUTBOX = []; save(LS.outbox, OUTBOX); }
     save(LS.sync, SYNC); stopSync(); startSync();
   };
   $("#syncUrl").addEventListener("change", applySync);

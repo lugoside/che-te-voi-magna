@@ -1,6 +1,6 @@
 // Service worker: NETWORK-FIRST con fallback su cache.
 // Online → sempre l'ultima versione (app). Offline → ultima copia salvata + dati da localStorage.
-const VERSION = "v17";
+const VERSION = "v18";
 const CACHE = "ctvm-" + VERSION;
 const SHELL_ASSETS = [
   "./", "./index.html", "./styles.css", "./app.js", "./engine.js", "./sync.js",
@@ -26,7 +26,7 @@ self.addEventListener("fetch", (e) => {
   if (new URL(e.request.url).origin !== self.location.origin) return;
   e.respondWith(
     fetch(e.request, { cache: "no-store" })
-      .then((res) => { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); return res; })
+      .then((res) => { if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); } return res; })
       .catch(() => caches.match(e.request).then((cached) => cached || caches.match("./index.html")))
   );
 });

@@ -58,40 +58,32 @@ export class Sync {
   _setStatus(s) { this._status = s; if (typeof this.onStatus === "function") this.onStatus(s); }
 
   // --- REST ---------------------------------------------------------------
-  async get(path) {
-    const u = this.nodeUrl(path); if (!u) return null;
+  // Richiesta generica. Ritorna { ok, status, data }: ok SOLO se la risposta HTTP è 2xx
+  // e il corpo non è un errore Firebase ({"error": "Permission denied"} ecc.).
+  // status 0 = errore di rete. Un errore NON va mai trattato come "nodo vuoto".
+  async request(method, path, obj) {
+    const u = this.nodeUrl(path); if (!u) return { ok: false, status: 0, data: null };
     try {
-      const r = await fetch(u + ".json", { cache: "no-store" });
-      this._setStatus("ok");
-      return await r.json();
-    } catch { this._setStatus("err"); return null; }
+      const init = method === "GET" ? { cache: "no-store" }
+        : { method, headers: { "Content-Type": "application/json; charset=utf-8" }, body: obj === undefined ? undefined : JSON.stringify(obj) };
+      const r = await fetch(u + ".json", init);
+      let data = null; try { data = await r.json(); } catch {}
+      const ok = r.ok && !(data && typeof data === "object" && !Array.isArray(data) && "error" in data && Object.keys(data).length === 1);
+      this._setStatus(ok ? "ok" : "err");
+      return { ok, status: r.status, data: ok ? data : null };
+    } catch { this._setStatus("err"); return { ok: false, status: 0, data: null }; }
   }
+  // lettura di un nodo: { ok, data } (data null = nodo davvero vuoto, solo se ok)
+  get(path) { return this.request("GET", path); }
   // documento condiviso: sostituisce il nodo
-  async put(path, obj) {
-    const u = this.nodeUrl(path); if (!u) return false;
-    try {
-      await fetch(u + ".json", { method: "PUT", headers: { "Content-Type": "application/json; charset=utf-8" }, body: JSON.stringify(obj) });
-      this._setStatus("ok"); return true;
-    } catch { this._setStatus("err"); return false; }
-  }
+  async put(path, obj) { return (await this.request("PUT", path, obj)).ok; }
   // aggiornamento parziale (merge di chiavi) del nodo
-  async patch(path, obj) {
-    const u = this.nodeUrl(path); if (!u) return false;
-    try {
-      await fetch(u + ".json", { method: "PATCH", headers: { "Content-Type": "application/json; charset=utf-8" }, body: JSON.stringify(obj) });
-      this._setStatus("ok"); return true;
-    } catch { this._setStatus("err"); return false; }
-  }
+  async patch(path, obj) { return (await this.request("PATCH", path, obj)).ok; }
   // append a un log: POST → Firebase genera un pushId. Ritorna il pushId o null.
   async append(path, obj) {
-    const u = this.nodeUrl(path); if (!u) return null;
     const body = { ...obj, ts: { ".sv": "timestamp" } }; // timestamp del server (autorevole)
-    try {
-      const r = await fetch(u + ".json", { method: "POST", headers: { "Content-Type": "application/json; charset=utf-8" }, body: JSON.stringify(body) });
-      const j = await r.json();
-      this._setStatus("ok");
-      return j && j.name ? j.name : null;
-    } catch { this._setStatus("err"); return null; }
+    const r = await this.request("POST", path, body);
+    return r.ok && r.data && r.data.name ? r.data.name : null;
   }
 
   // --- SSE (realtime) -----------------------------------------------------
